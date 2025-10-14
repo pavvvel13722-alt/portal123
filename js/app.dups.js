@@ -319,13 +319,12 @@
 
             function parseStopPhrases(value) {
                 if (!value) return [];
-                const raw = String(value).split(/[\n;,]+/);
+                const entries = splitStopEntries(String(value));
                 const seen = new Set();
                 const phrases = [];
-                raw.forEach((entry) => {
-                    const normalized = entry.trim().toLowerCase().replace(/ё/g, 'е');
-                    if (!normalized) return;
-                    const tokens = normalized.split(/\s+/).filter(Boolean);
+                entries.forEach((entry) => {
+                    if (!entry) return;
+                    const tokens = tokenize(entry);
                     if (!tokens.length) return;
                     const key = tokens.join(' ');
                     if (seen.has(key)) return;
@@ -370,17 +369,11 @@
             }
 
             function normalizeAuthor(value) {
-                return String(value || '').toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ').trim();
+                return collapseWhitespace(toLowerNoYo(value));
             }
 
             function normalizeDescription(text, stopPhrases) {
-                let cleaned = String(text || '').toLowerCase();
-                cleaned = cleaned.replace(/ё/g, 'е');
-                cleaned = cleaned.replace(/<[^>]+>/g, ' ');
-                cleaned = cleaned.replace(/&[a-z#0-9]+;/gi, ' ');
-                cleaned = cleaned.replace(/[^a-zа-я0-9\s]+/gi, ' ');
-                cleaned = cleaned.replace(/\s+/g, ' ').trim();
-                const rawTokens = cleaned ? cleaned.match(/[a-zа-я0-9]+/g) : null;
+                const rawTokens = tokenize(text);
                 const filteredTokens = (stopPhrases && stopPhrases.length)
                     ? removeStopPhrases(rawTokens || [], stopPhrases)
                     : (rawTokens || []);
@@ -728,15 +721,19 @@
 
             function buildSnippet(text, tokens) {
                 if (!text) return '<span class="record__meta">Описание отсутствует</span>';
-                const trimmed = String(text).trim().replace(/\s+/g, ' ');
+                const trimmed = collapseWhitespace(String(text || ''));
                 const short = trimmed.length > 280 ? trimmed.slice(0, 280) + '…' : trimmed;
                 const highlightTokens = Array.from(tokens || [])
-                    .map((token) => (token ? token.trim().toLowerCase() : ''))
+                    .map((token) => {
+                        if (!token) return '';
+                        const normalized = toLowerNoYo(token).trim();
+                        return normalized;
+                    })
                     .filter((token) => token && token.length > 2 && SAFE_TOKEN_PATTERN.test(token));
                 if (!highlightTokens.length) {
                     return escapeHtml(short);
                 }
-                const lowerText = short.toLowerCase();
+                const lowerText = toLowerNoYo(short);
                 const ranges = [];
                 const seen = new Set();
                 for (let i = 0; i < highlightTokens.length; i += 1) {
@@ -783,6 +780,106 @@
                     result += escapeHtml(short.slice(cursor));
                 }
                 return result;
+            }
+
+            function splitStopEntries(value) {
+                const entries = [];
+                let current = '';
+                for (let i = 0; i < value.length; i += 1) {
+                    const char = value[i];
+                    if (char === '\r') continue;
+                    if (char === '\n' || char === ';' || char === ',') {
+                        if (current) {
+                            entries.push(current);
+                            current = '';
+                        }
+                        continue;
+                    }
+                    current += char;
+                }
+                if (current) entries.push(current);
+                return entries;
+            }
+
+            function toLowerNoYo(value) {
+                if (value == null) return '';
+                return String(value).toLowerCase().split('ё').join('е');
+            }
+
+            function collapseWhitespace(value) {
+                let result = '';
+                let lastWasSpace = false;
+                for (let i = 0; i < value.length; i += 1) {
+                    const char = value[i];
+                    const isSpace = char === ' ' || char === '\t' || char === '\n' || char === '\r' || char === '\f' || char === '\v' || char === '\u00A0';
+                    if (isSpace) {
+                        if (!lastWasSpace && result) {
+                            result += ' ';
+                        }
+                        lastWasSpace = true;
+                    } else {
+                        result += char;
+                        lastWasSpace = false;
+                    }
+                }
+                return result.trim();
+            }
+
+            function tokenize(text) {
+                const source = toLowerNoYo(text);
+                const tokens = [];
+                let token = '';
+                let inTag = false;
+                let inEntity = false;
+                for (let i = 0; i < source.length; i += 1) {
+                    const char = source[i];
+                    if (inTag) {
+                        if (char === '>') {
+                            inTag = false;
+                        }
+                        continue;
+                    }
+                    if (char === '<') {
+                        if (token) {
+                            tokens.push(token);
+                            token = '';
+                        }
+                        inTag = true;
+                        continue;
+                    }
+                    if (inEntity) {
+                        if (char === ';' || char === ' ' || char === '\t' || char === '\n' || char === '\r') {
+                            inEntity = false;
+                        }
+                        continue;
+                    }
+                    if (char === '&') {
+                        if (token) {
+                            tokens.push(token);
+                            token = '';
+                        }
+                        inEntity = true;
+                        continue;
+                    }
+                    const code = char.charCodeAt(0);
+                    if (isTokenCharCode(code)) {
+                        token += char;
+                    } else {
+                        if (token) {
+                            tokens.push(token);
+                            token = '';
+                        }
+                    }
+                }
+                if (token) tokens.push(token);
+                return tokens;
+            }
+
+            function isTokenCharCode(code) {
+                const isDigit = code >= 48 && code <= 57;
+                const isLatin = code >= 97 && code <= 122;
+                const isCyrillic = code >= 1072 && code <= 1103;
+                return isDigit || isLatin || isCyrillic;
             }
 
             function isWordChar(char) {

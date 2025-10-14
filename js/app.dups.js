@@ -38,13 +38,13 @@
 
     document.getElementById('btn-export-duplicates').addEventListener('click', () => {
         if (!currentClusters.length) return;
-        const rows = [['PrimaryID', 'DuplicateID', 'Author', 'Similarity', 'CreatedAt', 'Priority', 'Status']];
+        const rows = [['PrimaryID', 'DuplicateID', 'GroupLabel', 'Similarity', 'CreatedAt', 'Priority', 'Status']];
         currentClusters.forEach((cluster) => {
             cluster.duplicates.forEach((dup) => {
                 rows.push([
                     cluster.primary.id,
                     dup.id,
-                    cluster.author,
+                    cluster.label,
                     dup.similarity,
                     dup.createdAt,
                     dup.priority || '',
@@ -86,7 +86,7 @@
             header.className = 'cluster__header';
             const title = document.createElement('h3');
             title.className = 'cluster__title';
-            title.textContent = `${cluster.author || 'Неизвестный автор'} — ${cluster.members.length} обращений`;
+            title.textContent = `${cluster.label || 'Неизвестная группа'} — ${cluster.members.length} обращений`;
             const stats = document.createElement('div');
             stats.className = 'cluster__stats';
             stats.textContent = `Порог ≥ ${(cluster.threshold * 100).toFixed(0)}%, окно ±${cluster.window} д.`;
@@ -110,7 +110,7 @@
                     </div>
                     <div class="record__field">
                         <span>${record.author || '—'}</span>
-                        <span class="record__meta">${record.status || ''}</span>
+                        <span class="record__meta">${[record.status || '', record.contact ? `Контакт: ${record.contact}` : ''].filter(Boolean).join(' · ')}</span>
                     </div>
                     <div class="record__field">
                         <span>${record.priority || '—'}</span>
@@ -205,16 +205,16 @@
                 const windowDays = Number(settings.dateWindow) || 0;
                 const threshold = Number(settings.similarityThreshold) || 0.62;
                 const prepared = records.map((rec, index) => prepareRecord(rec, stopwords, index));
-                const grouped = groupByAuthor(prepared);
+                const grouped = groupByActor(prepared);
                 const clusters = [];
 
-                for (const [author, items] of grouped.entries()) {
+                for (const group of grouped.values()) {
+                    const { key, label, items } = group;
                     const edges = buildEdges(items, windowDays, threshold);
                     const components = connectedComponents(items, edges);
                     components.forEach((component) => {
                         if (component.length <= 1) return;
-                        const cluster = buildCluster(component, threshold, windowDays);
-                        cluster.author = component[0] && component[0].author ? component[0].author : author;
+                        const cluster = buildCluster(component, threshold, windowDays, label, key);
                         clusters.push(cluster);
                     });
                 }
@@ -239,7 +239,8 @@
                     normalized,
                     trigrams,
                     createdTime: dateValue,
-                    createdDate: dateValue ? new Date(dateValue) : null
+                    createdDate: dateValue ? new Date(dateValue) : null,
+                    groupLabel: (record.contact || record.author || record.requester || '').trim()
                 };
             }
 
@@ -283,12 +284,15 @@
                 return Number.isNaN(fallback) ? null : fallback;
             }
 
-            function groupByAuthor(records) {
+            function groupByActor(records) {
                 const map = new Map();
                 records.forEach((record) => {
-                    const author = (record.author || 'Не указан').toLowerCase();
-                    if (!map.has(author)) map.set(author, []);
-                    map.get(author).push(record);
+                    const label = record.groupLabel || record.contact || record.author || record.requester || 'Не указан';
+                    const key = label ? label.toLowerCase() : 'не указан';
+                    if (!map.has(key)) {
+                        map.set(key, { key, label, items: [] });
+                    }
+                    map.get(key).items.push(record);
                 });
                 return map;
             }
@@ -371,7 +375,7 @@
                 return components;
             }
 
-            function buildCluster(records, threshold, windowDays) {
+            function buildCluster(records, threshold, windowDays, label, key) {
                 const primary = selectPrimary(records);
                 const members = records
                     .map((record) => {
@@ -381,6 +385,7 @@
                         return {
                             id: record.id,
                             author: record.author,
+                            contact: record.contact,
                             title: record.title,
                             status: record.status,
                             priority: record.priority,
@@ -398,7 +403,9 @@
                     members,
                     duplicates,
                     threshold,
-                    window: windowDays
+                    window: windowDays,
+                    label: label || 'Неизвестная группа',
+                    groupKey: key
                 };
             }
 

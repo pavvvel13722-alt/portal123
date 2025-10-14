@@ -301,6 +301,8 @@
             'Нормативный срок': 'dueAt',
             'SLA-индикатор': 'sla',
             'SLM-индикатор': 'sla',
+            'Контактное лицо': 'contact',
+            'Пользователь': 'requester',
             Сервис: 'service',
             Теги: 'tags',
             'Тэги': 'tags'
@@ -319,10 +321,21 @@
         normalized.id = normalized.id || '';
         normalized.priority = normalized.priority || '';
         normalized.sla = normalized.sla || '';
+        normalized.contact = normalized.contact || '';
+        normalized.requester = normalized.requester || '';
         normalized.service = normalized.service || '';
         normalized.tags = normalized.tags || '';
         normalized._raw = row;
-        normalized._searchBlob = [normalized.id, normalized.author, normalized.title, normalized.description, normalized.service, normalized.tags]
+        normalized._searchBlob = [
+            normalized.id,
+            normalized.author,
+            normalized.contact,
+            normalized.requester,
+            normalized.title,
+            normalized.description,
+            normalized.service,
+            normalized.tags
+        ]
             .filter(Boolean)
             .join(' \n ')
             .toLowerCase();

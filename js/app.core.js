@@ -141,22 +141,46 @@
     }
 
     function detectDelimiter(text) {
-        const candidates = [';', ',', '\t'];
-        const lines = text.split(/\r?\n/).slice(0, 10);
+        const candidates = [';', ',', '\t', '|'];
+        const lines = text.split(/\r?\n/).filter(Boolean).slice(0, 50);
         let best = candidates[0];
         let bestScore = -Infinity;
+
         for (const delimiter of candidates) {
-            let score = 0;
-            for (const line of lines) {
-                const count = line.split(delimiter).length;
-                if (count > 1) score += count;
-            }
+            const counts = lines
+                .map((line) => countColumns(line, delimiter))
+                .filter((count) => count > 1);
+            if (!counts.length) continue;
+            const average = counts.reduce((sum, value) => sum + value, 0) / counts.length;
+            const variance = counts.reduce((sum, value) => sum + Math.pow(value - average, 2), 0) / counts.length;
+            const score = average - variance;
             if (score > bestScore) {
                 bestScore = score;
                 best = delimiter;
             }
         }
+
         return best;
+    }
+
+    function countColumns(line, delimiter) {
+        let count = 1;
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i += 1) {
+            const char = line[i];
+            if (char === '"') {
+                if (inQuotes && line[i + 1] === '"') {
+                    i += 1;
+                } else {
+                    inQuotes = !inQuotes;
+                }
+            } else if (!inQuotes && char === delimiter) {
+                count += 1;
+            } else if (!inQuotes && delimiter === '\t' && char === '\t') {
+                count += 1;
+            }
+        }
+        return count;
     }
 
     function normalizeRow(row, columns) {

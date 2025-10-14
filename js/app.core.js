@@ -3,9 +3,15 @@
     const deepClone = typeof structuredClone === 'function' ? structuredClone : (value) => JSON.parse(JSON.stringify(value));
     const DEFAULTS = {
         duplicates: {
-            similarityThreshold: 0.62,
-            dateWindow: 3,
-            stopwords: 'и, в, во, не, что, он, на, я, с, со, как, а, то, все, она, так, его, но, да, ты, к, у, же, вы, за, бы, по, только, ее, мне, было, вот, от, меня, еще, нет, о, из, ему, теперь, когда, даже, ну, вдруг, ли, если, уже, или, ни, быть, был, него, до, вас, нибудь, опять, уж, вам, ведь, там, потом, себя, ничего, ей, может, они, тут, где, есть, надо, ней, для, мы, тебя, их, чем, была, сам, чтоб, без, будто, чего, раз'
+            smartThreshold: true,
+            thresholdShort: 0.8,
+            thresholdMedium: 0.7,
+            thresholdLong: 0.62,
+            baseThreshold: 0.62,
+            timeGuardEnabled: true,
+            timeGuardDays: 14,
+            stopPhrases: 'добрый день\nздравствуйте\nспасибо\nс уважением\nпрошу помочь\nне работает\nесть ошибка',
+            stopwords: ''
         },
         search: {
             categories: [
@@ -35,12 +41,14 @@
     function loadSettings() {
         try {
             const raw = localStorage.getItem(STORAGE_KEY);
-            if (!raw) return deepClone(DEFAULTS);
+            const base = deepClone(DEFAULTS);
+            if (!raw) return upgradeSettings(base);
             const parsed = JSON.parse(raw);
-            return mergeDeep(deepClone(DEFAULTS), parsed);
+            const merged = mergeDeep(base, parsed);
+            return upgradeSettings(merged);
         } catch (err) {
             console.warn('Не удалось загрузить настройки', err);
-            return deepClone(DEFAULTS);
+            return upgradeSettings(deepClone(DEFAULTS));
         }
     }
 
@@ -61,6 +69,37 @@
             }
         }
         return target;
+    }
+
+    function upgradeSettings(settings) {
+        if (!settings.duplicates) {
+            settings.duplicates = deepClone(DEFAULTS.duplicates);
+        }
+        const dup = settings.duplicates;
+        const ensureNumber = (value, fallback) => {
+            const num = Number(value);
+            return Number.isFinite(num) ? num : fallback;
+        };
+        dup.smartThreshold = dup.smartThreshold !== undefined ? Boolean(dup.smartThreshold) : DEFAULTS.duplicates.smartThreshold;
+        dup.thresholdShort = ensureNumber(dup.thresholdShort, DEFAULTS.duplicates.thresholdShort);
+        dup.thresholdMedium = ensureNumber(dup.thresholdMedium, DEFAULTS.duplicates.thresholdMedium);
+        dup.thresholdLong = ensureNumber(dup.thresholdLong, DEFAULTS.duplicates.thresholdLong);
+        dup.baseThreshold = ensureNumber(
+            dup.baseThreshold !== undefined ? dup.baseThreshold : dup.similarityThreshold,
+            DEFAULTS.duplicates.baseThreshold
+        );
+        if (dup.stopPhrases == null || dup.stopPhrases === '') {
+            dup.stopPhrases = typeof dup.stopwords === 'string' && dup.stopwords.trim()
+                ? dup.stopwords
+                : DEFAULTS.duplicates.stopPhrases;
+        }
+        dup.timeGuardEnabled = dup.timeGuardEnabled !== undefined ? Boolean(dup.timeGuardEnabled) : true;
+        dup.timeGuardDays = ensureNumber(
+            dup.timeGuardDays !== undefined ? dup.timeGuardDays : dup.dateWindow,
+            DEFAULTS.duplicates.timeGuardDays
+        );
+        if (dup.timeGuardDays < 0) dup.timeGuardDays = 0;
+        return settings;
     }
 
     function init() {
@@ -371,21 +410,36 @@
             const label = document.createElement('label');
             label.textContent = desc.label;
             let control;
+            const controlId = `${group}-${desc.key}`;
+            label.htmlFor = controlId;
             if (desc.type === 'textarea') {
                 control = document.createElement('textarea');
                 control.value = getSettingValue(group, desc.key) ?? desc.defaultValue ?? '';
             } else {
                 control = document.createElement('input');
                 control.type = desc.type || 'text';
-                control.value = getSettingValue(group, desc.key) ?? desc.defaultValue ?? '';
+                if (desc.type === 'checkbox') {
+                    const value = getSettingValue(group, desc.key);
+                    control.checked = value !== undefined ? Boolean(value) : Boolean(desc.defaultValue);
+                } else {
+                    control.value = getSettingValue(group, desc.key) ?? desc.defaultValue ?? '';
+                }
                 if (desc.step) control.step = String(desc.step);
                 if (desc.min !== undefined) control.min = String(desc.min);
                 if (desc.max !== undefined) control.max = String(desc.max);
             }
+            control.id = controlId;
+            control.dataset.settingKey = desc.key;
+            control.dataset.settingGroup = group;
             control.addEventListener('change', (event) => {
-                let newValue = event.target.value;
-                if (desc.type === 'number') {
-                    newValue = Number(newValue);
+                let newValue;
+                if (desc.type === 'checkbox') {
+                    newValue = event.target.checked;
+                } else {
+                    newValue = event.target.value;
+                    if (desc.type === 'number') {
+                        newValue = Number(newValue);
+                    }
                 }
                 updateSetting(group, desc.key, newValue);
             });

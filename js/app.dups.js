@@ -2,24 +2,39 @@
     const worker = createWorker();
     let currentRecords = [];
     let currentClusters = [];
+    let lastAnalysisMeta = null;
+    let settingsContainer = null;
 
     document.addEventListener('app:ready', ({ detail }) => {
-        const container = document.getElementById('duplicate-settings');
+        settingsContainer = document.getElementById('duplicate-settings');
         AppCore.mountSettings(
-            container,
+            settingsContainer,
             [
-                { key: 'similarityThreshold', label: 'Порог похожести (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
-                { key: 'dateWindow', label: 'Окно по дате (± дней)', type: 'number', min: 0, max: 30, step: 1 },
-                { key: 'stopwords', label: 'Стоп-слова (через запятую)', type: 'textarea' }
+                { key: 'smartThreshold', label: 'Умный порог по длине', type: 'checkbox', defaultValue: true },
+                { key: 'thresholdShort', label: 'Порог для коротких описаний (<8 токенов)', type: 'number', step: 0.01, min: 0, max: 1 },
+                { key: 'thresholdMedium', label: 'Порог для средних описаний (8-19 токенов)', type: 'number', step: 0.01, min: 0, max: 1 },
+                { key: 'thresholdLong', label: 'Порог для длинных описаний (≥20 токенов)', type: 'number', step: 0.01, min: 0, max: 1 },
+                { key: 'baseThreshold', label: 'Порог без умной логики', type: 'number', step: 0.01, min: 0, max: 1 },
+                { key: 'timeGuardEnabled', label: 'Учитывать интервал ± дней', type: 'checkbox', defaultValue: true },
+                { key: 'timeGuardDays', label: 'Интервал по дате (дни)', type: 'number', step: 1, min: 0, max: 60 },
+                { key: 'stopPhrases', label: 'Стоп-фразы в описании (по одной в строке)', type: 'textarea' }
             ],
             'duplicates'
         );
+        syncSettingsState();
+    });
+
+    document.addEventListener('app:settings-update', ({ detail }) => {
+        if (detail.group === 'duplicates') {
+            syncSettingsState();
+        }
     });
 
     document.addEventListener('app:data-updated', ({ detail }) => {
         currentRecords = detail.records;
         currentClusters = [];
-        renderClusters([]);
+        lastAnalysisMeta = null;
+        renderClusters([], null);
     });
 
     document.getElementById('btn-run-duplicates').addEventListener('click', () => {
@@ -38,13 +53,13 @@
 
     document.getElementById('btn-export-duplicates').addEventListener('click', () => {
         if (!currentClusters.length) return;
-        const rows = [['PrimaryID', 'DuplicateID', 'GroupLabel', 'Similarity', 'CreatedAt', 'Priority', 'Status']];
+        const rows = [['PrimaryID', 'DuplicateID', 'Author', 'Similarity', 'CreatedAt', 'Priority', 'Status']];
         currentClusters.forEach((cluster) => {
             cluster.duplicates.forEach((dup) => {
                 rows.push([
                     cluster.primary.id,
                     dup.id,
-                    cluster.label,
+                    cluster.author,
                     dup.similarity,
                     dup.createdAt,
                     dup.priority || '',
@@ -65,13 +80,30 @@
         const { type, payload } = event.data;
         if (type === 'analysis-complete') {
             currentClusters = payload.clusters;
-            renderClusters(currentClusters);
+            lastAnalysisMeta = payload.meta;
+            renderClusters(currentClusters, lastAnalysisMeta);
             document.getElementById('btn-run-duplicates').textContent = '🔍 Найти дубли';
             document.getElementById('btn-run-duplicates').disabled = false;
         }
     });
 
-    function renderClusters(clusters) {
+    function syncSettingsState() {
+        if (!settingsContainer) return;
+        const smartToggle = settingsContainer.querySelector('[data-setting-key="smartThreshold"]');
+        const smartDependent = settingsContainer.querySelectorAll('[data-setting-key="thresholdShort"], [data-setting-key="thresholdMedium"], [data-setting-key="thresholdLong"]');
+        const guardToggle = settingsContainer.querySelector('[data-setting-key="timeGuardEnabled"]');
+        const guardField = settingsContainer.querySelector('[data-setting-key="timeGuardDays"]');
+        const smartOn = smartToggle ? smartToggle.checked : Boolean(AppCore.getSettingValue('duplicates', 'smartThreshold'));
+        smartDependent.forEach((input) => {
+            input.disabled = !smartOn;
+        });
+        if (guardField) {
+            const guardOn = guardToggle ? guardToggle.checked : Boolean(AppCore.getSettingValue('duplicates', 'timeGuardEnabled'));
+            guardField.disabled = !guardOn;
+        }
+    }
+
+    function renderClusters(clusters, meta) {
         const container = document.getElementById('duplicate-results');
         document.getElementById('btn-export-duplicates').disabled = !clusters.length;
         if (!clusters.length) {
@@ -86,10 +118,26 @@
             header.className = 'cluster__header';
             const title = document.createElement('h3');
             title.className = 'cluster__title';
-            title.textContent = `${cluster.label || 'Неизвестная группа'} — ${cluster.members.length} обращений`;
+            title.textContent = `${cluster.author || 'Неизвестная группа'} — ${cluster.members.length} обращений`;
             const stats = document.createElement('div');
             stats.className = 'cluster__stats';
-            stats.textContent = `Порог ≥ ${(cluster.threshold * 100).toFixed(0)}%, окно ±${cluster.window} д.`;
+            const statsParts = [];
+            const thresholds = meta?.thresholds || {};
+            if (meta?.smartThreshold) {
+                const short = thresholds.short != null ? (thresholds.short * 100).toFixed(0) : '—';
+                const medium = thresholds.medium != null ? (thresholds.medium * 100).toFixed(0) : '—';
+                const long = thresholds.long != null ? (thresholds.long * 100).toFixed(0) : '—';
+                statsParts.push(`Умный порог: <8 → ${short}%, 8-19 → ${medium}%, ≥20 → ${long}%`);
+            } else if (thresholds.base != null) {
+                statsParts.push(`Порог: ${(thresholds.base * 100).toFixed(0)}%`);
+            }
+            if (meta?.timeGuard?.enabled) {
+                statsParts.push(`Интервал ±${meta.timeGuard.days} д.`);
+            }
+            if (!statsParts.length) {
+                statsParts.push('Параметры порога недоступны');
+            }
+            stats.textContent = statsParts.join(' · ');
             header.appendChild(title);
             header.appendChild(stats);
             wrapper.appendChild(header);
@@ -105,24 +153,27 @@
 
                 row.innerHTML = `
                     <div class="record__field record__id">
-                        <a href="https://sfera.vtb.ru/sd/support?open=${record.id}" target="_blank" rel="noopener noreferrer">${record.id || '—'}</a>
-                        <span class="record__meta">${record.title || ''}</span>
+                        <div class="record__title">
+                            <span class="record__badge">${record.isPrimary ? '🟩' : '🟥'}</span>
+                            <a href="https://sfera.vtb.ru/sd/support?open=${record.id}" target="_blank" rel="noopener noreferrer">${record.id || '—'}</a>
+                        </div>
+                        <div class="record__snippet">${record.snippet || '<span class="record__meta">Нет описания</span>'}</div>
                     </div>
                     <div class="record__field">
                         <span>${record.author || '—'}</span>
-                        <span class="record__meta">${[record.status || '', record.contact ? `Контакт: ${record.contact}` : ''].filter(Boolean).join(' · ')}</span>
+                        <span class="record__meta">${record.isPrimary ? 'Основное обращение' : 'Дубль основного'}</span>
                     </div>
                     <div class="record__field">
                         <span>${record.priority || '—'}</span>
-                        <span class="record__meta">SLA: ${record.sla || '—'}</span>
+                        <span class="record__meta">${record.sla ? `SLA: ${record.sla}` : ''}</span>
                     </div>
                     <div class="record__field">
                         <span>${record.createdAt || '—'}</span>
-                        <span class="record__meta">Норматив: ${record.dueAt || '—'}</span>
+                        <span class="record__meta">${record.status || ''}</span>
                     </div>
                     <div class="record__field">
                         <span>${record.similarity ? record.similarity : record.isPrimary ? '—' : '0%'}</span>
-                        <span class="record__meta">Похожесть</span>
+                        <span class="record__meta">${record.similarityDetail || 'Порог: —'}</span>
                     </div>
                     <div class="record__actions">
                         <button data-action="open" data-id="${record.id}">🔗 Открыть</button>
@@ -165,102 +216,251 @@
 
     function createWorker() {
         const script = `
-            const PRIORITY_WEIGHTS = {
-                'критический': 5,
-                'critical': 5,
-                'очень высокий': 4,
-                'high': 4,
-                'высокий': 4,
-                'средний': 3,
-                'normal': 3,
-                'низкий': 2,
-                'low': 2,
-                'плановый': 1,
-                'плановая': 1,
-                'низкий приоритет': 1
+            const STEM_SUFFIXES = ['иями', 'ями', 'ами', 'ий', 'ый', 'ой', 'ая', 'яя', 'ое', 'ее', 'ие', 'ые', 'ого', 'его', 'ому', 'ему', 'ах', 'ях', 'ов', 'ев', 'ым', 'им', 'ам', 'ям', 'ую', 'юю', 'ешь', 'ишь', 'ать', 'ять', 'ить', 'еть', 'тся', 'ться', 'лся', 'лась', 'лось', 'лись'];
+            const TECH_TOKEN_MAP = {
+                'врм': 'vrm',
+                'vrm': 'vrm',
+                'rdp': 'rdp',
+                'mstsc': 'rdp',
+                'криптопро': 'cryptopro',
+                'cryptopro': 'cryptopro',
+                'crypto': 'cryptopro',
+                'nla': 'nla',
+                'credssp': 'nla'
             };
-
-            const SLA_WEIGHTS = {
-                'нарушено': 3,
-                'просрочено': 3,
-                'в риске': 2,
-                'risk': 2,
-                'ожидает': 1.5,
-                'ожидание': 1.5,
-                'выполнено': 1,
-                'закрыто': 1,
-                'нет данных': 0
-            };
+            const MULTI_TOKEN_PATTERNS = [
+                { sequence: ['crypto', 'pro'], replacement: 'cryptopro' }
+            ];
 
             self.onmessage = (event) => {
-                const { type, payload } = event.data;
-                if (type === 'analyze') {
-                    const result = analyze(payload.records, payload.settings);
+                const data = event.data || {};
+                if (data.type === 'analyze') {
+                    const payload = data.payload || {};
+                    const records = Array.isArray(payload.records) ? payload.records : [];
+                    const settings = payload.settings || {};
+                    const result = analyze(records, settings);
                     self.postMessage({ type: 'analysis-complete', payload: result });
                 }
             };
 
             function analyze(records, settings) {
-                const stopwords = buildStopwords(settings.stopwords);
-                const windowDays = Number(settings.dateWindow) || 0;
-                const threshold = Number(settings.similarityThreshold) || 0.62;
-                const prepared = records.map((rec, index) => prepareRecord(rec, stopwords, index));
-                const grouped = groupByActor(prepared);
+                const options = prepareOptions(settings);
+                const prepared = records.map((rec, index) => prepareRecord(rec, options, index)).filter(Boolean);
+                const groups = groupByAuthor(prepared);
                 const clusters = [];
 
-                for (const group of grouped.values()) {
-                    const { key, label, items } = group;
-                    const edges = buildEdges(items, windowDays, threshold);
-                    const components = connectedComponents(items, edges);
+                groups.forEach((group) => {
+                    if (!group.items || group.items.length < 2) {
+                        return;
+                    }
+                    const components = buildComponents(group.items, options);
                     components.forEach((component) => {
                         if (component.length <= 1) return;
-                        const cluster = buildCluster(component, threshold, windowDays, label, key);
-                        clusters.push(cluster);
+                        const cluster = buildCluster(component, options, group);
+                        if (cluster) clusters.push(cluster);
                     });
-                }
+                });
 
                 clusters.sort((a, b) => b.members.length - a.members.length);
-                return { clusters, threshold, window: windowDays };
-            }
 
-            function buildStopwords(stopwordsString) {
-                if (!stopwordsString) return new Set();
-                return new Set(stopwordsString.split(/[,;\n]/).map((word) => word.trim().toLowerCase()).filter(Boolean));
-            }
-
-            function prepareRecord(record, stopwords, index) {
-                const text = `${record.title || ''} ${record.description || ''}`;
-                const normalized = normalizeText(text, stopwords);
-                const trigrams = getTrigramVector(normalized);
-                const dateValue = parseDate(record.createdAt);
                 return {
-                    ...record,
-                    index,
-                    normalized,
-                    trigrams,
-                    createdTime: dateValue,
-                    createdDate: dateValue ? new Date(dateValue) : null,
-                    groupLabel: (record.contact || record.author || record.requester || '').trim()
+                    clusters,
+                    meta: {
+                        smartThreshold: options.smartThreshold,
+                        thresholds: {
+                            short: options.thresholdShort,
+                            medium: options.thresholdMedium,
+                            long: options.thresholdLong,
+                            base: options.baseThreshold
+                        },
+                        timeGuard: {
+                            enabled: options.timeGuardEnabled && options.timeGuardDays > 0,
+                            days: options.timeGuardDays
+                        }
+                    }
                 };
             }
 
-            function normalizeText(text, stopwords) {
-                return text
-                    .toLowerCase()
-                    .replace(/[^a-zа-я0-9\s]+/g, ' ')
-                    .split(/\s+/)
-                    .filter((word) => word && !stopwords.has(word))
-                    .join(' ');
+            function prepareOptions(settings) {
+                const toNumber = (value, fallback) => {
+                    const num = Number(value);
+                    return Number.isFinite(num) ? num : fallback;
+                };
+                const clamp01 = (value) => Math.min(1, Math.max(0, value));
+                return {
+                    smartThreshold: settings.smartThreshold !== false,
+                    thresholdShort: clamp01(toNumber(settings.thresholdShort, 0.8)),
+                    thresholdMedium: clamp01(toNumber(settings.thresholdMedium, 0.7)),
+                    thresholdLong: clamp01(toNumber(settings.thresholdLong, 0.62)),
+                    baseThreshold: clamp01(toNumber(settings.baseThreshold, 0.62)),
+                    timeGuardEnabled: settings.timeGuardEnabled !== false,
+                    timeGuardDays: Math.max(0, Math.floor(toNumber(settings.timeGuardDays, 14))),
+                    stopPhrases: parseStopPhrases(settings.stopPhrases || settings.stopwords || '')
+                };
             }
 
-            function getTrigramVector(text) {
+            function parseStopPhrases(value) {
+                if (!value) return [];
+                const raw = String(value).split(/[\n;,]+/);
+                const seen = new Set();
+                const phrases = [];
+                raw.forEach((entry) => {
+                    const normalized = entry.trim().toLowerCase().replace(/ё/g, 'е');
+                    if (!normalized) return;
+                    if (seen.has(normalized)) return;
+                    seen.add(normalized);
+                    phrases.push(normalized);
+                });
+                return phrases;
+            }
+
+            function prepareRecord(record, options, index) {
+                if (!record) return null;
+                const rawAuthor = record.author != null && String(record.author).trim() !== ''
+                    ? String(record.author)
+                    : (record.requester || '');
+                const authorKey = normalizeAuthor(rawAuthor);
+                const authorLabel = rawAuthor && String(rawAuthor).trim() !== ''
+                    ? String(rawAuthor).trim()
+                    : 'Автор не указан';
+                const description = typeof record.description === 'string' ? record.description : '';
+                const normalizedDesc = normalizeDescription(description, options.stopPhrases);
+                const trigramVector = buildTrigramVector(normalizedDesc.text);
+                const shingles = buildShingles(normalizedDesc.stemmedTokens, 3);
+                const createdTime = parseDate(record.createdAt);
+                return {
+                    index,
+                    id: record.id || '',
+                    author: authorLabel,
+                    authorKey,
+                    priority: record.priority || '',
+                    status: record.status || '',
+                    sla: record.sla || '',
+                    createdAt: record.createdAt || '',
+                    dueAt: record.dueAt || '',
+                    description,
+                    tokenPairs: normalizedDesc.tokenPairs,
+                    stemmedTokens: normalizedDesc.stemmedTokens,
+                    tokenCount: normalizedDesc.tokenCount,
+                    trigramVector,
+                    shingles,
+                    createdTime
+                };
+            }
+
+            function normalizeAuthor(value) {
+                return String(value || '').toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ').trim();
+            }
+
+            function normalizeDescription(text, stopPhrases) {
+                let cleaned = String(text || '').toLowerCase();
+                cleaned = cleaned.replace(/ё/g, 'е');
+                cleaned = cleaned.replace(/<[^>]+>/g, ' ');
+                cleaned = cleaned.replace(/&[a-z#0-9]+;/gi, ' ');
+                cleaned = cleaned.replace(/[\p{P}\p{S}]+/gu, ' ');
+                cleaned = cleaned.replace(/\s+/g, ' ').trim();
+                if (stopPhrases && stopPhrases.length) {
+                    cleaned = removeStopPhrases(cleaned, stopPhrases);
+                }
+                cleaned = cleaned.replace(/\s+/g, ' ').trim();
+                const rawTokens = cleaned ? cleaned.match(/[\p{L}\d]+/gu) : null;
+                const tokens = rawTokens ? mapTechnicalTokens(rawTokens) : [];
+                const tokenPairs = tokens.map((token) => {
+                    const surface = token;
+                    const stem = stemToken(token);
+                    return stem ? { surface, stem } : null;
+                }).filter(Boolean);
+                const stemmedTokens = tokenPairs.map((pair) => pair.stem);
+                return {
+                    text: stemmedTokens.join(' '),
+                    stemmedTokens,
+                    tokenPairs,
+                    tokenCount: stemmedTokens.length
+                };
+            }
+
+            function removeStopPhrases(text, stopPhrases) {
+                let result = text;
+                stopPhrases.forEach((phrase) => {
+                    const parts = phrase.split(/\s+/).filter(Boolean).map(escapeRegExp);
+                    if (!parts.length) return;
+                    const pattern = new RegExp('(?:^|\\s)(' + parts.join('\\s+') + ')(?=\\s|$)', 'gu');
+                    result = result.replace(pattern, ' ');
+                });
+                return result;
+            }
+
+            function mapTechnicalTokens(tokens) {
+                const mapped = [];
+                for (let i = 0; i < tokens.length; i += 1) {
+                    const token = tokens[i];
+                    if (!token) continue;
+                    let replaced = false;
+                    for (let j = 0; j < MULTI_TOKEN_PATTERNS.length; j += 1) {
+                        const pattern = MULTI_TOKEN_PATTERNS[j];
+                        let matches = true;
+                        for (let k = 0; k < pattern.sequence.length; k += 1) {
+                            if (tokens[i + k] !== pattern.sequence[k]) {
+                                matches = false;
+                                break;
+                            }
+                        }
+                        if (matches) {
+                            mapped.push(pattern.replacement);
+                            i += pattern.sequence.length - 1;
+                            replaced = true;
+                            break;
+                        }
+                    }
+                    if (replaced) continue;
+                    const canonical = TECH_TOKEN_MAP[token] || token;
+                    mapped.push(canonical);
+                }
+                return mapped;
+            }
+
+            function stemToken(token) {
+                if (!token) return '';
+                let result = token;
+                if (result.length > 4 && (result.endsWith('ся') || result.endsWith('сь'))) {
+                    result = result.slice(0, -2);
+                }
+                for (let i = 0; i < STEM_SUFFIXES.length; i += 1) {
+                    const suffix = STEM_SUFFIXES[i];
+                    if (result.length - suffix.length >= 3 && result.endsWith(suffix)) {
+                        result = result.slice(0, -suffix.length);
+                        break;
+                    }
+                }
+                if (result.length > 6 && result.endsWith('ость')) {
+                    result = result.slice(0, -4);
+                }
+                if (result.length > 6 && result.endsWith('ение')) {
+                    result = result.slice(0, -4);
+                }
+                return result;
+            }
+
+            function buildTrigramVector(text) {
                 const map = new Map();
-                const padded = `  ${text}  `;
-                for (let i = 0; i < padded.length - 2; i++) {
+                const padded = '  ' + text + '  ';
+                for (let i = 0; i < padded.length - 2; i += 1) {
                     const trigram = padded.slice(i, i + 3);
                     map.set(trigram, (map.get(trigram) || 0) + 1);
                 }
                 return map;
+            }
+
+            function buildShingles(tokens, size) {
+                if (!tokens.length) return new Set();
+                const set = new Set(tokens);
+                if (tokens.length < size) {
+                    return set;
+                }
+                for (let i = 0; i <= tokens.length - size; i += 1) {
+                    set.add(tokens.slice(i, i + size).join(' '));
+                }
+                return set;
             }
 
             function parseDate(value) {
@@ -269,13 +469,14 @@
                 if (value instanceof Date) return value.getTime();
                 const trimmed = String(value).trim();
                 if (!trimmed) return null;
-                const iso = Date.parse(trimmed.replace(/\./g, '-').replace(/(\d{2})-(\d{2})-(\d{4})/, '$3-$2-$1'));
+                const normalized = trimmed.replace(/\./g, '-');
+                const iso = Date.parse(normalized.replace(/(\d{2})-(\d{2})-(\d{4})/, '$3-$2-$1'));
                 if (!Number.isNaN(iso)) return iso;
                 const parts = trimmed.match(/(\d{1,2})\.(\d{1,2})\.(\d{2,4})(?:\s+(\d{1,2}):(\d{2}))?/);
                 if (parts) {
                     const day = Number(parts[1]);
                     const month = Number(parts[2]) - 1;
-                    const year = Number(parts[3].length === 2 ? `20${parts[3]}` : parts[3]);
+                    const year = Number(parts[3].length === 2 ? '20' + parts[3] : parts[3]);
                     const hours = Number(parts[4] || 0);
                     const minutes = Number(parts[5] || 0);
                     return Date.UTC(year, month, day, hours, minutes);
@@ -284,40 +485,201 @@
                 return Number.isNaN(fallback) ? null : fallback;
             }
 
-            function groupByActor(records) {
+            function groupByAuthor(records) {
                 const map = new Map();
                 records.forEach((record) => {
-                    const label = record.groupLabel || record.contact || record.author || record.requester || 'Не указан';
-                    const key = label ? label.toLowerCase() : 'не указан';
+                    const key = record.authorKey || 'не указан';
                     if (!map.has(key)) {
-                        map.set(key, { key, label, items: [] });
+                        map.set(key, { key, label: record.author, items: [] });
                     }
                     map.get(key).items.push(record);
                 });
                 return map;
             }
 
-            function buildEdges(records, windowDays, threshold) {
-                const edges = new Map();
-                const windowMs = windowDays * 24 * 60 * 60 * 1000;
-                records.sort((a, b) => (a.createdTime || 0) - (b.createdTime || 0));
-                for (let i = 0; i < records.length; i++) {
-                    for (let j = i + 1; j < records.length; j++) {
-                        const left = records[i];
-                        const right = records[j];
-                        if (windowMs && left.createdTime != null && right.createdTime != null) {
-                            const diff = Math.abs(left.createdTime - right.createdTime);
-                            if (diff > windowMs) {
-                                if (right.createdTime - left.createdTime > windowMs) break;
+            function buildComponents(records, options) {
+                if (records.length < 2) return [];
+                const dsu = createDisjointSet(records.length);
+                const guardMs = options.timeGuardEnabled ? options.timeGuardDays * 24 * 60 * 60 * 1000 : 0;
+                const ordered = records.map((record, idx) => ({ record, idx }))
+                    .sort((a, b) => {
+                        const timeA = a.record.createdTime != null ? a.record.createdTime : Number.POSITIVE_INFINITY;
+                        const timeB = b.record.createdTime != null ? b.record.createdTime : Number.POSITIVE_INFINITY;
+                        return timeA - timeB;
+                    });
+
+                for (let i = 0; i < ordered.length; i += 1) {
+                    const left = ordered[i];
+                    for (let j = i + 1; j < ordered.length; j += 1) {
+                        const right = ordered[j];
+                        if (guardMs && left.record.createdTime != null && right.record.createdTime != null) {
+                            const diff = Math.abs(right.record.createdTime - left.record.createdTime);
+                            if (diff > guardMs) {
+                                if (right.record.createdTime - left.record.createdTime > guardMs) {
+                                    break;
+                                }
+                                continue;
                             }
                         }
-                        const similarity = cosineSimilarity(left.trigrams, right.trigrams);
-                        if (similarity >= threshold) {
-                            connect(edges, left.index, right.index, similarity);
+                        const pair = computePairSimilarity(left.record, right.record, options);
+                        if (pair.score >= pair.threshold) {
+                            dsu.union(left.idx, right.idx);
                         }
                     }
                 }
-                return edges;
+
+                return extractComponents(records, dsu);
+            }
+
+            function computePairSimilarity(a, b, options) {
+                const t3 = cosineSimilarity(a.trigramVector, b.trigramVector);
+                const j3 = jaccardSimilarity(a.shingles, b.shingles);
+                const score = Math.max(0, Math.min(1, 0.6 * t3 + 0.4 * j3));
+                const minLen = Math.min(a.tokenCount, b.tokenCount);
+                let threshold = options.smartThreshold ? selectSmartThreshold(options, minLen) : options.baseThreshold;
+                if (!Number.isFinite(threshold)) threshold = options.baseThreshold;
+                if (minLen === 0) {
+                    threshold = 1;
+                }
+                return { score, t3, j3, threshold };
+            }
+
+            function selectSmartThreshold(options, length) {
+                if (length < 8) return options.thresholdShort;
+                if (length < 20) return options.thresholdMedium;
+                return options.thresholdLong;
+            }
+
+            function extractComponents(records, dsu) {
+                const groups = new Map();
+                records.forEach((record, idx) => {
+                    const root = dsu.find(idx);
+                    if (!groups.has(root)) {
+                        groups.set(root, []);
+                    }
+                    groups.get(root).push(record);
+                });
+                return Array.from(groups.values());
+            }
+
+            function buildCluster(records, options, group) {
+                const primary = selectPrimary(records);
+                const highlight = new Set();
+                const duplicates = [];
+
+                records.forEach((record) => {
+                    if (record.index === primary.index) return;
+                    const pair = computePairSimilarity(record, primary, options);
+                    const sharedTokens = collectSharedTokens(record, primary);
+                    sharedTokens.forEach((token) => highlight.add(token));
+                    duplicates.push(formatDuplicate(record, pair, sharedTokens));
+                });
+
+                duplicates.sort((a, b) => {
+                    const left = a.similarityValue != null ? a.similarityValue : 0;
+                    const right = b.similarityValue != null ? b.similarityValue : 0;
+                    return right - left;
+                });
+
+                const primaryTokens = highlight.size ? highlight : collectAllSurfaceTokens(primary);
+                const primaryMember = formatPrimary(primary, primaryTokens);
+                const members = [primaryMember].concat(duplicates);
+
+                return {
+                    author: group.label || 'Автор не указан',
+                    authorKey: group.key,
+                    primary: primaryMember,
+                    duplicates,
+                    members
+                };
+            }
+
+            function selectPrimary(records) {
+                return records.slice().sort((a, b) => {
+                    const timeA = a.createdTime != null ? a.createdTime : Number.POSITIVE_INFINITY;
+                    const timeB = b.createdTime != null ? b.createdTime : Number.POSITIVE_INFINITY;
+                    if (timeA !== timeB) return timeA - timeB;
+                    return a.index - b.index;
+                })[0];
+            }
+
+            function formatDuplicate(record, pair, sharedTokens) {
+                return {
+                    id: record.id,
+                    author: record.author,
+                    priority: record.priority || '',
+                    status: record.status || '',
+                    sla: record.sla || '',
+                    createdAt: record.createdAt || '',
+                    dueAt: record.dueAt || '',
+                    snippet: buildSnippet(record.description, sharedTokens),
+                    similarity: Math.round(pair.score * 100) + '%',
+                    similarityValue: pair.score,
+                    similarityDetail: buildSimilarityDetail(pair),
+                    thresholdUsed: pair.threshold,
+                    isPrimary: false
+                };
+            }
+
+            function formatPrimary(record, highlightTokens) {
+                return {
+                    id: record.id,
+                    author: record.author,
+                    priority: record.priority || '',
+                    status: record.status || '',
+                    sla: record.sla || '',
+                    createdAt: record.createdAt || '',
+                    dueAt: record.dueAt || '',
+                    snippet: buildSnippet(record.description, highlightTokens),
+                    similarity: null,
+                    similarityValue: null,
+                    similarityDetail: 'Опорная заявка',
+                    thresholdUsed: null,
+                    isPrimary: true
+                };
+            }
+
+            function collectSharedTokens(record, reference) {
+                const shared = new Set();
+                const referenceStems = new Set((reference.tokenPairs || []).map((pair) => pair.stem));
+                (record.tokenPairs || []).forEach((pair) => {
+                    if (!pair) return;
+                    if (referenceStems.has(pair.stem) && pair.surface) {
+                        shared.add(pair.surface);
+                    }
+                });
+                return shared;
+            }
+
+            function collectAllSurfaceTokens(record) {
+                const set = new Set();
+                (record.tokenPairs || []).forEach((pair) => {
+                    if (pair && pair.surface && pair.surface.length > 2) {
+                        set.add(pair.surface);
+                    }
+                });
+                return set;
+            }
+
+            function buildSimilarityDetail(pair) {
+                const t = Math.round(pair.t3 * 100);
+                const j = Math.round(pair.j3 * 100);
+                const threshold = Math.round(pair.threshold * 100);
+                return 'T3 ' + t + '% · J3 ' + j + '% · Порог ' + threshold + '%';
+            }
+
+            function buildSnippet(text, tokens) {
+                if (!text) return '<span class="record__meta">Описание отсутствует</span>';
+                const trimmed = String(text).trim().replace(/\s+/g, ' ');
+                const short = trimmed.length > 280 ? trimmed.slice(0, 280) + '…' : trimmed;
+                let safe = escapeHtml(short);
+                const highlightTokens = Array.from(tokens || []).filter((token) => token && token.length > 2);
+                highlightTokens.sort((a, b) => b.length - a.length);
+                highlightTokens.forEach((token) => {
+                    const pattern = new RegExp('\\b' + escapeRegExp(token) + '\\b', 'giu');
+                    safe = safe.replace(pattern, (match) => '<mark>' + match + '</mark>');
+                });
+                return safe;
             }
 
             function cosineSimilarity(mapA, mapB) {
@@ -342,95 +704,55 @@
                 return dot / (Math.sqrt(normA) * Math.sqrt(normB));
             }
 
-            function connect(edges, a, b, similarity) {
-                if (!edges.has(a)) edges.set(a, new Map());
-                if (!edges.has(b)) edges.set(b, new Map());
-                edges.get(a).set(b, similarity);
-                edges.get(b).set(a, similarity);
+            function jaccardSimilarity(setA, setB) {
+                if (!setA.size && !setB.size) return 0;
+                let intersection = 0;
+                setA.forEach((value) => {
+                    if (setB.has(value)) intersection += 1;
+                });
+                const union = new Set();
+                setA.forEach((value) => union.add(value));
+                setB.forEach((value) => union.add(value));
+                if (!union.size) return 0;
+                return intersection / union.size;
             }
 
-            function connectedComponents(records, edges) {
-                const visited = new Set();
-                const components = [];
-                const recordMap = new Map(records.map((rec) => [rec.index, rec]));
-                for (const record of records) {
-                    if (visited.has(record.index)) continue;
-                    const stack = [record.index];
-                    const component = [];
-                    while (stack.length) {
-                        const current = stack.pop();
-                        if (visited.has(current)) continue;
-                        visited.add(current);
-                        const node = recordMap.get(current);
-                        component.push(node);
-                        const neighbors = edges.get(current);
-                        if (neighbors) {
-                            neighbors.forEach((_, neighbor) => {
-                                if (!visited.has(neighbor)) stack.push(neighbor);
-                            });
-                        }
+            function createDisjointSet(size) {
+                const parent = Array.from({ length: size }, (_, i) => i);
+                const rank = new Array(size).fill(0);
+                const find = (x) => {
+                    if (parent[x] !== x) {
+                        parent[x] = find(parent[x]);
                     }
-                    components.push(component);
-                }
-                return components;
-            }
-
-            function buildCluster(records, threshold, windowDays, label, key) {
-                const primary = selectPrimary(records);
-                const members = records
-                    .map((record) => {
-                        const similarity = record.index === primary.index
-                            ? null
-                            : cosineSimilarity(record.trigrams, primary.trigrams);
-                        return {
-                            id: record.id,
-                            author: record.author,
-                            contact: record.contact,
-                            title: record.title,
-                            status: record.status,
-                            priority: record.priority,
-                            sla: record.sla,
-                            createdAt: record.createdAt,
-                            dueAt: record.dueAt,
-                            similarity: similarity != null ? `${Math.round(similarity * 100)}%` : null,
-                            isPrimary: record.index === primary.index
-                        };
-                    })
-                    .sort((a, b) => (b.isPrimary ? 1 : 0) - (a.isPrimary ? 1 : 0));
-                const duplicates = members.filter((member) => !member.isPrimary);
-                return {
-                    primary: members.find((member) => member.isPrimary),
-                    members,
-                    duplicates,
-                    threshold,
-                    window: windowDays,
-                    label: label || 'Неизвестная группа',
-                    groupKey: key
+                    return parent[x];
                 };
+                const union = (a, b) => {
+                    const rootA = find(a);
+                    const rootB = find(b);
+                    if (rootA === rootB) return;
+                    if (rank[rootA] < rank[rootB]) {
+                        parent[rootA] = rootB;
+                    } else if (rank[rootA] > rank[rootB]) {
+                        parent[rootB] = rootA;
+                    } else {
+                        parent[rootB] = rootA;
+                        rank[rootA] += 1;
+                    }
+                };
+                return { find, union };
             }
 
-            function selectPrimary(records) {
-                return records.slice().sort((a, b) => {
-                    const priorityDiff = getPriorityWeight(b.priority) - getPriorityWeight(a.priority);
-                    if (priorityDiff !== 0) return priorityDiff;
-                    const slaDiff = getSlaWeight(b.sla) - getSlaWeight(a.sla);
-                    if (slaDiff !== 0) return slaDiff;
-                    const dateA = a.createdTime ?? Number.MAX_SAFE_INTEGER;
-                    const dateB = b.createdTime ?? Number.MAX_SAFE_INTEGER;
-                    return dateA - dateB;
-                })[0];
+            function escapeHtml(value) {
+                return String(value)
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
             }
 
-            function getPriorityWeight(priority) {
-                if (!priority) return 0;
-                const normalized = priority.toLowerCase();
-                return PRIORITY_WEIGHTS[normalized] ?? 0;
-            }
-
-            function getSlaWeight(sla) {
-                if (!sla) return 0;
-                const normalized = sla.toLowerCase();
-                return SLA_WEIGHTS[normalized] ?? 0;
+            function escapeRegExp(value) {
+                return String(value).replace(/[-\\^$*+?.()|[\]{}]/g, '\\$&');
             }
         `;
         const blob = new Blob([script], { type: 'application/javascript' });

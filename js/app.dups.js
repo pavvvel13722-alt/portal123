@@ -85,6 +85,19 @@
             document.getElementById('btn-run-duplicates').textContent = '🔍 Найти дубли';
             document.getElementById('btn-run-duplicates').disabled = false;
         }
+        if (type === 'analysis-error') {
+            console.error('Duplicate analysis failed', payload?.error);
+            alert('Не удалось выполнить анализ дублей. Подробности в консоли.');
+            document.getElementById('btn-run-duplicates').textContent = '🔍 Найти дубли';
+            document.getElementById('btn-run-duplicates').disabled = false;
+        }
+    });
+
+    worker.addEventListener('error', (event) => {
+        console.error('Duplicate worker runtime error', event.message);
+        alert('Произошла ошибка Web Worker. Проверьте консоль.');
+        document.getElementById('btn-run-duplicates').textContent = '🔍 Найти дубли';
+        document.getElementById('btn-run-duplicates').disabled = false;
     });
 
     function syncSettingsState() {
@@ -238,8 +251,12 @@
                     const payload = data.payload || {};
                     const records = Array.isArray(payload.records) ? payload.records : [];
                     const settings = payload.settings || {};
-                    const result = analyze(records, settings);
-                    self.postMessage({ type: 'analysis-complete', payload: result });
+                    try {
+                        const result = analyze(records, settings);
+                        self.postMessage({ type: 'analysis-complete', payload: result });
+                    } catch (error) {
+                        self.postMessage({ type: 'analysis-error', payload: { error: serializeError(error) } });
+                    }
                 }
             };
 
@@ -357,13 +374,13 @@
                 cleaned = cleaned.replace(/ё/g, 'е');
                 cleaned = cleaned.replace(/<[^>]+>/g, ' ');
                 cleaned = cleaned.replace(/&[a-z#0-9]+;/gi, ' ');
-                cleaned = cleaned.replace(/[\p{P}\p{S}]+/gu, ' ');
+                cleaned = cleaned.replace(/[^a-zа-я0-9\s]+/gi, ' ');
                 cleaned = cleaned.replace(/\s+/g, ' ').trim();
                 if (stopPhrases && stopPhrases.length) {
                     cleaned = removeStopPhrases(cleaned, stopPhrases);
                 }
                 cleaned = cleaned.replace(/\s+/g, ' ').trim();
-                const rawTokens = cleaned ? cleaned.match(/[\p{L}\d]+/gu) : null;
+                const rawTokens = cleaned ? cleaned.match(/[a-zа-я0-9]+/g) : null;
                 const tokens = rawTokens ? mapTechnicalTokens(rawTokens) : [];
                 const tokenPairs = tokens.map((token) => {
                     const surface = token;
@@ -384,7 +401,7 @@
                 stopPhrases.forEach((phrase) => {
                     const parts = phrase.split(/\s+/).filter(Boolean).map(escapeRegExp);
                     if (!parts.length) return;
-                    const pattern = new RegExp('(?:^|\\s)(' + parts.join('\\s+') + ')(?=\\s|$)', 'gu');
+                    const pattern = new RegExp('(?:^|\\s)(' + parts.join('\\s+') + ')(?=\\s|$)', 'g');
                     result = result.replace(pattern, ' ');
                 });
                 return result;
@@ -443,6 +460,7 @@
 
             function buildTrigramVector(text) {
                 const map = new Map();
+                if (!text || !text.length) return map;
                 const padded = '  ' + text + '  ';
                 for (let i = 0; i < padded.length - 2; i += 1) {
                     const trigram = padded.slice(i, i + 3);
@@ -676,10 +694,20 @@
                 const highlightTokens = Array.from(tokens || []).filter((token) => token && token.length > 2);
                 highlightTokens.sort((a, b) => b.length - a.length);
                 highlightTokens.forEach((token) => {
-                    const pattern = new RegExp('\\b' + escapeRegExp(token) + '\\b', 'giu');
+                    const pattern = new RegExp('\\b' + escapeRegExp(token) + '\\b', 'gi');
                     safe = safe.replace(pattern, (match) => '<mark>' + match + '</mark>');
                 });
                 return safe;
+            }
+
+            function serializeError(error) {
+                if (!error) return { message: 'Неизвестная ошибка' };
+                if (typeof error === 'string') return { message: error };
+                return {
+                    message: error.message || String(error),
+                    stack: error.stack || null,
+                    name: error.name || 'Error'
+                };
             }
 
             function cosineSimilarity(mapA, mapB) {

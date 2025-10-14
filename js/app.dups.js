@@ -730,20 +730,68 @@
                 if (!text) return '<span class="record__meta">Описание отсутствует</span>';
                 const trimmed = String(text).trim().replace(/\s+/g, ' ');
                 const short = trimmed.length > 280 ? trimmed.slice(0, 280) + '…' : trimmed;
-                let safe = escapeHtml(short);
                 const highlightTokens = Array.from(tokens || [])
-                    .map((token) => (token ? token.trim() : ''))
+                    .map((token) => (token ? token.trim().toLowerCase() : ''))
                     .filter((token) => token && token.length > 2 && SAFE_TOKEN_PATTERN.test(token));
-                highlightTokens.sort((a, b) => b.length - a.length);
-                highlightTokens.forEach((token) => {
-                    try {
-                        const pattern = new RegExp('\\b' + escapeRegExp(token) + '\\b', 'gi');
-                        safe = safe.replace(pattern, (match) => '<mark>' + match + '</mark>');
-                    } catch (error) {
-                        // Игнорируем токены, которые не удаётся интерпретировать как регулярное выражение.
+                if (!highlightTokens.length) {
+                    return escapeHtml(short);
+                }
+                const lowerText = short.toLowerCase();
+                const ranges = [];
+                const seen = new Set();
+                for (let i = 0; i < highlightTokens.length; i += 1) {
+                    const token = highlightTokens[i];
+                    if (seen.has(token)) continue;
+                    seen.add(token);
+                    let position = 0;
+                    while (position < lowerText.length) {
+                        const found = lowerText.indexOf(token, position);
+                        if (found === -1) break;
+                        const before = found === 0 ? '' : lowerText[found - 1];
+                        const afterIndex = found + token.length;
+                        const after = afterIndex >= lowerText.length ? '' : lowerText[afterIndex];
+                        if (!isWordChar(before) && !isWordChar(after)) {
+                            ranges.push([found, afterIndex]);
+                        }
+                        position = found + token.length;
                     }
-                });
-                return safe;
+                }
+                if (!ranges.length) {
+                    return escapeHtml(short);
+                }
+                ranges.sort((a, b) => a[0] - b[0]);
+                const merged = [];
+                for (let i = 0; i < ranges.length; i += 1) {
+                    const [start, end] = ranges[i];
+                    if (!merged.length || start > merged[merged.length - 1][1]) {
+                        merged.push([start, end]);
+                    } else {
+                        merged[merged.length - 1][1] = Math.max(merged[merged.length - 1][1], end);
+                    }
+                }
+                let result = '';
+                let cursor = 0;
+                for (let i = 0; i < merged.length; i += 1) {
+                    const [start, end] = merged[i];
+                    if (cursor < start) {
+                        result += escapeHtml(short.slice(cursor, start));
+                    }
+                    result += '<mark>' + escapeHtml(short.slice(start, end)) + '</mark>';
+                    cursor = end;
+                }
+                if (cursor < short.length) {
+                    result += escapeHtml(short.slice(cursor));
+                }
+                return result;
+            }
+
+            function isWordChar(char) {
+                if (!char) return false;
+                const code = char.charCodeAt(0);
+                const isDigit = code >= 48 && code <= 57;
+                const isLatinLower = code >= 97 && code <= 122;
+                const isCyrillicLower = code >= 1072 && code <= 1103;
+                return isDigit || isLatinLower || isCyrillicLower;
             }
 
             function serializeError(error) {
@@ -825,9 +873,6 @@
                     .replace(/'/g, '&#39;');
             }
 
-            function escapeRegExp(value) {
-                return String(value).replace(/[-\\^$*+?.()|[\]{}]/g, '\\$&');
-            }
         `;
         const blob = new Blob([script], { type: 'application/javascript' });
         const url = URL.createObjectURL(blob);

@@ -23,6 +23,10 @@
         modalThreshold: document.getElementById('category-threshold')
     };
 
+    const multiSelects = {};
+    let openMultiSelectInstance = null;
+    let openMultiSelectRoot = null;
+
     let records = [];
     let processedRecords = [];
     let recordMap = new Map();
@@ -34,6 +38,7 @@
     let modalState = { id: null };
 
     document.addEventListener('app:ready', () => {
+        initMultiSelects();
         renderCategories();
         setupEvents();
         updateKeywordChips();
@@ -49,12 +54,31 @@
         resetSearchState();
     });
 
+    document.addEventListener('click', (event) => {
+        const target = event.target;
+        if (openMultiSelectInstance && openMultiSelectRoot && target instanceof Node && !openMultiSelectRoot.contains(target)) {
+            openMultiSelectInstance.close();
+        }
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && openMultiSelectInstance) {
+            openMultiSelectInstance.close();
+        }
+    });
+
     function setupEvents() {
         elements.runSearch.addEventListener('click', runSearch);
         elements.exportSearch.addEventListener('click', exportCurrentResults);
         elements.resetFilters.addEventListener('click', () => {
-            elements.filterStatus.value = '';
-            elements.filterPriority.value = '';
+            if (multiSelects.status) {
+                multiSelects.status.clear(true);
+                multiSelects.status.close();
+            }
+            if (multiSelects.priority) {
+                multiSelects.priority.clear(true);
+                multiSelects.priority.close();
+            }
             runSearch();
         });
         elements.query.addEventListener('input', () => {
@@ -127,11 +151,15 @@
             const authorText = (record.author || '').toLowerCase();
             const descriptionText = (record.description || '').toLowerCase();
             const tokens = tokenize(`${authorText} ${descriptionText}`);
+            const statusValue = (record.status || '').toLowerCase();
+            const priorityValue = (record.priority || '').toLowerCase();
             return {
                 ...record,
                 __id: String(idx),
                 authorText,
                 descriptionText,
+                statusValue,
+                priorityValue,
                 tokens,
                 tokenSet: new Set(tokens)
             };
@@ -217,14 +245,14 @@
 
     function collectFilters() {
         return {
-            status: elements.filterStatus.value.trim().toLowerCase(),
-            priority: elements.filterPriority.value.trim().toLowerCase()
+            status: multiSelects.status ? multiSelects.status.getSelectedValues() : [],
+            priority: multiSelects.priority ? multiSelects.priority.getSelectedValues() : []
         };
     }
 
     function passesFilters(record, filters) {
-        if (filters.status && !(record.status || '').toLowerCase().includes(filters.status)) return false;
-        if (filters.priority && !(record.priority || '').toLowerCase().includes(filters.priority)) return false;
+        if (filters.status.length && !filters.status.includes(record.statusValue)) return false;
+        if (filters.priority.length && !filters.priority.includes(record.priorityValue)) return false;
         return true;
     }
 
@@ -289,7 +317,6 @@
                     <thead>
                         <tr>
                             <th>ID</th>
-                            <th>Автор</th>
                             <th>Описание</th>
                             <th>Создано</th>
                             <th>Статус</th>
@@ -318,7 +345,6 @@
             const descriptionFull = escapeAttribute(row.description || '');
             tr.innerHTML = `
                 <td><a href="https://sfera.vtb.ru/sd/support?open=${encodeURIComponent(row.id)}" target="_blank" rel="noopener">${escapeHtml(row.id || '')}</a></td>
-                <td>${escapeHtml(row.author || '')}</td>
                 <td><span class="description-cell" title="${descriptionFull}">${row.descriptionHighlighted || escapeHtml(row.description || '')}</span></td>
                 <td>${escapeHtml(row.createdAt || '')}</td>
                 <td>${escapeHtml(row.status || '')}</td>
@@ -339,11 +365,10 @@
 
     function exportCurrentResults() {
         if (!currentResults.length) return;
-        const rows = [['ID', 'Автор', 'Описание', 'Создано', 'Статус', 'Приоритет']];
+        const rows = [['ID', 'Описание', 'Создано', 'Статус', 'Приоритет']];
         currentResults.forEach((row) => {
             rows.push([
                 row.id,
-                row.author,
                 row.description,
                 row.createdAt,
                 row.status,
@@ -489,18 +514,10 @@
             if (record.status) statuses.add(record.status);
             if (record.priority) priorities.add(record.priority);
         });
-        setSelectOptions(elements.filterStatus, statuses, 'Все статусы');
-        setSelectOptions(elements.filterPriority, priorities, 'Все приоритеты');
-    }
-
-    function setSelectOptions(select, values, placeholder) {
-        const sorted = Array.from(values).sort((a, b) => a.localeCompare(b, 'ru', { sensitivity: 'base' }));
-        select.innerHTML = `<option value="">${placeholder}</option>` + sorted.map((value) => {
-            const escaped = escapeHtml(value);
-            const attr = escapeAttribute(value.toLowerCase());
-            return `<option value="${attr}">${escaped}</option>`;
-        }).join('');
-        select.selectedIndex = 0;
+        const sortedStatuses = Array.from(statuses).sort((a, b) => a.localeCompare(b, 'ru', { sensitivity: 'base' }));
+        const sortedPriorities = Array.from(priorities).sort((a, b) => a.localeCompare(b, 'ru', { sensitivity: 'base' }));
+        if (multiSelects.status) multiSelects.status.setOptions(sortedStatuses);
+        if (multiSelects.priority) multiSelects.priority.setOptions(sortedPriorities);
     }
 
     function openCategoryModal(category) {
@@ -617,6 +634,179 @@
         link.download = 'categories.json';
         link.click();
         URL.revokeObjectURL(link.href);
+    }
+
+    function initMultiSelects() {
+        multiSelects.status = createMultiSelect('filter-status', 'Все статусы', runSearch);
+        multiSelects.priority = createMultiSelect('filter-priority', 'Все приоритеты', runSearch);
+    }
+
+    function createMultiSelect(id, placeholder, onChange) {
+        const root = document.querySelector(`[data-multi="${id}"]`);
+        const hiddenInput = document.getElementById(id);
+        if (!root || !hiddenInput) {
+            return {
+                setOptions() {},
+                getSelectedValues() {
+                    return [];
+                },
+                clear() {},
+                close() {}
+            };
+        }
+
+        const trigger = root.querySelector('.multi-select__trigger');
+        const labelNode = root.querySelector('.multi-select__label');
+        const dropdown = root.querySelector('.multi-select__dropdown');
+
+        const state = {
+            options: [],
+            selected: new Map()
+        };
+
+        function updateLabel() {
+            if (!labelNode) return;
+            if (!state.selected.size) {
+                labelNode.textContent = placeholder;
+                return;
+            }
+            const selectedLabels = Array.from(state.selected.values());
+            labelNode.textContent = selectedLabels.length <= 2
+                ? selectedLabels.join(', ')
+                : `Выбрано: ${selectedLabels.length}`;
+        }
+
+        function syncHidden() {
+            hiddenInput.value = Array.from(state.selected.keys()).join(',');
+        }
+
+        function close() {
+            root.classList.remove('multi-select--open');
+            dropdown.hidden = true;
+            trigger?.setAttribute('aria-expanded', 'false');
+            if (openMultiSelectInstance === api) {
+                openMultiSelectInstance = null;
+                openMultiSelectRoot = null;
+            }
+        }
+
+        function open() {
+            if (!state.options.length) return;
+            if (openMultiSelectInstance && openMultiSelectInstance !== api && typeof openMultiSelectInstance.close === 'function') {
+                openMultiSelectInstance.close();
+            }
+            root.classList.add('multi-select--open');
+            dropdown.hidden = false;
+            trigger?.setAttribute('aria-expanded', 'true');
+            openMultiSelectInstance = api;
+            openMultiSelectRoot = root;
+        }
+
+        function toggle() {
+            if (root.classList.contains('multi-select--open')) {
+                close();
+            } else {
+                open();
+            }
+        }
+
+        function clear(silent = false) {
+            const hadSelection = state.selected.size > 0;
+            state.selected.clear();
+            dropdown.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+                input.checked = false;
+            });
+            syncHidden();
+            updateLabel();
+            if (!silent && hadSelection && typeof onChange === 'function') {
+                onChange();
+            }
+        }
+
+        function applyOptions(options) {
+            state.options = options
+                .map((label) => {
+                    const raw = label == null ? '' : String(label);
+                    const clean = raw.trim();
+                    return clean
+                        ? {
+                            label: clean,
+                            normalized: clean.toLowerCase()
+                        }
+                        : null;
+                })
+                .filter(Boolean);
+            dropdown.innerHTML = '';
+            clear(true);
+            if (!state.options.length) {
+                close();
+                return;
+            }
+            const list = document.createElement('ul');
+            list.className = 'multi-select__list';
+            state.options.forEach((option, index) => {
+                const item = document.createElement('li');
+                item.className = 'multi-select__item';
+                const checkboxId = `${id}-${index}`;
+                item.innerHTML = `
+                    <label for="${escapeAttribute(checkboxId)}">
+                        <input type="checkbox" id="${escapeAttribute(checkboxId)}" value="${escapeAttribute(option.normalized)}">
+                        <span>${escapeHtml(option.label)}</span>
+                    </label>
+                `;
+                list.appendChild(item);
+            });
+            dropdown.appendChild(list);
+            close();
+        }
+
+        dropdown.addEventListener('change', (event) => {
+            const input = event.target;
+            if (!(input instanceof HTMLInputElement) || input.type !== 'checkbox') return;
+            const value = input.value;
+            const option = state.options.find((opt) => opt.normalized === value);
+            if (!option) return;
+            if (input.checked) {
+                state.selected.set(value, option.label);
+            } else {
+                state.selected.delete(value);
+            }
+            syncHidden();
+            updateLabel();
+            if (typeof onChange === 'function') onChange();
+        });
+
+        dropdown.addEventListener('click', (event) => {
+            event.stopPropagation();
+        });
+
+        trigger?.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            toggle();
+        });
+
+        trigger?.addEventListener('keydown', (event) => {
+            if (event.key === ' ' || event.key === 'Enter') {
+                event.preventDefault();
+                toggle();
+            } else if (event.key === 'Escape') {
+                close();
+            }
+        });
+
+        updateLabel();
+
+        const api = {
+            setOptions: applyOptions,
+            getSelectedValues() {
+                return Array.from(state.selected.keys());
+            },
+            clear,
+            close
+        };
+
+        return api;
     }
 
     function escapeHtml(value) {

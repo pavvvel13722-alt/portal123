@@ -34,7 +34,7 @@
     --border-strong: rgba(148, 163, 184, 0.4);
     --success: #34d399;
     --danger: #f87171;
-    --highlight: #facc15;
+    --highlight: rgba(250, 204, 21, 0.28);
     --shadow-sm: 0 1px 2px rgba(8, 47, 73, 0.4);
     --shadow-md: 0 20px 45px rgba(8, 47, 73, 0.35);
 }
@@ -503,18 +503,28 @@ input[type="file"] {
 .category-item__header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    gap: 0.5rem;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
 }
 
-.category-item__header .category-item__actions {
-    display: flex;
-    gap: 0.3rem;
+.category-item__actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    max-width: 100%;
 }
 
 .category-item__actions .button {
-    padding: 0.35rem 0.6rem;
+    padding: 0.25rem 0.55rem;
     font-size: 0.8rem;
+    min-width: 0;
+    height: 2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .category-item__keywords {
@@ -569,13 +579,90 @@ input[type="file"] {
     font-size: 0.9rem;
 }
 
-.filter select {
-    appearance: none;
-    background-image: linear-gradient(45deg, transparent 50%, var(--accent) 50%),
-        linear-gradient(135deg, var(--accent) 50%, transparent 50%);
-    background-position: calc(100% - 20px) calc(50% - 4px), calc(100% - 15px) calc(50% - 4px);
-    background-size: 5px 5px, 5px 5px;
-    background-repeat: no-repeat;
+.multi-select {
+    position: relative;
+}
+
+.multi-select__trigger {
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.6rem 0.75rem;
+    border-radius: 0.75rem;
+    border: 1px solid var(--border);
+    background: var(--surface-muted);
+    color: inherit;
+    cursor: pointer;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.multi-select__trigger:hover,
+.multi-select__trigger:focus-visible {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+    outline: none;
+}
+
+.multi-select__label {
+    flex: 1;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.multi-select__icon {
+    font-size: 0.7rem;
+    color: var(--fg-soft);
+}
+
+.multi-select__dropdown {
+    position: absolute;
+    inset-inline-start: 0;
+    top: calc(100% + 0.4rem);
+    min-width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0.85rem;
+    padding: 0.75rem;
+    box-shadow: var(--shadow-md);
+    max-height: 260px;
+    overflow: auto;
+    z-index: 10;
+}
+
+.multi-select__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.multi-select__item label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.multi-select__item input[type="checkbox"] {
+    width: 1.1rem;
+    height: 1.1rem;
+    accent-color: var(--accent);
+}
+
+.multi-select--open .multi-select__icon {
+    transform: rotate(180deg);
+}
+
+.multi-select--open .multi-select__trigger {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .search-actions {
@@ -630,8 +717,24 @@ input[type="file"] {
     background: var(--surface-muted);
 }
 
-.table td:nth-child(3) {
-    width: 40%;
+.table th:nth-child(1),
+.table td:nth-child(1) {
+    white-space: nowrap;
+    width: 120px;
+}
+
+.table th:nth-child(2),
+.table td:nth-child(2) {
+    width: 45%;
+}
+
+.table th:nth-child(3),
+.table td:nth-child(3),
+.table th:nth-child(4),
+.table td:nth-child(4),
+.table th:nth-child(5),
+.table td:nth-child(5) {
+    white-space: nowrap;
 }
 
 .description-cell {

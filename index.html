@@ -68,15 +68,25 @@
                             <div class="filters">
                                 <label class="filter">
                                     <span>Статус</span>
-                                    <select id="filter-status">
-                                        <option value="">Все статусы</option>
-                                    </select>
+                                    <div class="multi-select" data-multi="filter-status">
+                                        <button type="button" class="multi-select__trigger" aria-haspopup="listbox" aria-expanded="false">
+                                            <span class="multi-select__label">Все статусы</span>
+                                            <span class="multi-select__icon">▾</span>
+                                        </button>
+                                        <div class="multi-select__dropdown" role="listbox" hidden></div>
+                                    </div>
+                                    <input type="hidden" id="filter-status" value="">
                                 </label>
                                 <label class="filter">
                                     <span>Приоритет</span>
-                                    <select id="filter-priority">
-                                        <option value="">Все приоритеты</option>
-                                    </select>
+                                    <div class="multi-select" data-multi="filter-priority">
+                                        <button type="button" class="multi-select__trigger" aria-haspopup="listbox" aria-expanded="false">
+                                            <span class="multi-select__label">Все приоритеты</span>
+                                            <span class="multi-select__icon">▾</span>
+                                        </button>
+                                        <div class="multi-select__dropdown" role="listbox" hidden></div>
+                                    </div>
+                                    <input type="hidden" id="filter-priority" value="">
                                 </label>
                             </div>
                             <div class="search-actions">

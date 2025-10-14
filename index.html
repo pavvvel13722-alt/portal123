@@ -26,6 +26,7 @@
         <nav class="tabs" role="tablist">
             <button class="tabs__tab tabs__tab--active" data-tab="duplicates" role="tab" aria-selected="true">Дубли обращений</button>
             <button class="tabs__tab" data-tab="search" role="tab" aria-selected="false">Поиск по обращениям</button>
+            <button class="tabs__tab" data-tab="tags" role="tab" aria-selected="false">Поиск тегов</button>
         </nav>
         <main class="tab-content">
             <section id="tab-duplicates" class="tab-panel tab-panel--active" role="tabpanel" aria-labelledby="duplicates">
@@ -102,6 +103,80 @@
                     </section>
                 </div>
             </section>
+            <section id="tab-tags" class="tab-panel" role="tabpanel" aria-labelledby="tags">
+                <div class="panel-header">
+                    <h2>Поиск тегов</h2>
+                    <div class="settings" id="tags-settings"></div>
+                </div>
+                <div class="tags-layout">
+                    <aside class="tags-layout__filters">
+                        <div class="filters-group">
+                            <label class="filter">
+                                <span>Шаблон</span>
+                                <div class="multi-select" data-multi="tag-filter-template">
+                                    <button type="button" class="multi-select__trigger" aria-haspopup="listbox" aria-expanded="false">
+                                        <span class="multi-select__label">Все шаблоны</span>
+                                        <span class="multi-select__icon">▾</span>
+                                    </button>
+                                    <div class="multi-select__dropdown" role="listbox" hidden></div>
+                                </div>
+                                <input type="hidden" id="tag-filter-template" value="">
+                            </label>
+                            <label class="filter">
+                                <span>Статус</span>
+                                <div class="multi-select" data-multi="tag-filter-status">
+                                    <button type="button" class="multi-select__trigger" aria-haspopup="listbox" aria-expanded="false">
+                                        <span class="multi-select__label">Решено, Выполнено</span>
+                                        <span class="multi-select__icon">▾</span>
+                                    </button>
+                                    <div class="multi-select__dropdown" role="listbox" hidden></div>
+                                </div>
+                                <input type="hidden" id="tag-filter-status" value="">
+                            </label>
+                        </div>
+                        <div class="filters-group">
+                            <label class="filter">
+                                <span>Мин. частота</span>
+                                <input type="number" id="tag-min-frequency" min="1" step="1" value="3">
+                            </label>
+                            <label class="filter">
+                                <span>Мин. длина токена</span>
+                                <input type="number" id="tag-min-token" min="1" step="1" value="2">
+                            </label>
+                            <label class="filter">
+                                <span>Топ-N</span>
+                                <input type="number" id="tag-top-n" min="1" step="1" value="25">
+                            </label>
+                        </div>
+                        <fieldset class="filters-group filters-group--inline" aria-labelledby="tag-ngram-title">
+                            <legend id="tag-ngram-title">N-граммы</legend>
+                            <label class="checkbox">
+                                <input type="checkbox" id="tag-ngram-1" value="1" checked>
+                                <span>1</span>
+                            </label>
+                            <label class="checkbox">
+                                <input type="checkbox" id="tag-ngram-2" value="2" checked>
+                                <span>2</span>
+                            </label>
+                            <label class="checkbox">
+                                <input type="checkbox" id="tag-ngram-3" value="3" checked>
+                                <span>3</span>
+                            </label>
+                        </fieldset>
+                        <div class="filters-group filters-group--actions">
+                            <button id="btn-run-tags" class="button button--primary" type="button" disabled>🔖 Найти теги</button>
+                            <button id="btn-export-tags-csv" class="button" type="button" disabled>📤 Экспорт CSV</button>
+                            <button id="btn-export-tags-json" class="button" type="button" disabled>📤 Экспорт JSON</button>
+                            <button id="btn-reset-tags" class="button button--ghost" type="button">↺ Сброс</button>
+                        </div>
+                    </aside>
+                    <section class="tags-layout__results" id="tag-results">
+                        <div class="empty-state">
+                            <p>Выберите шаблон и нажмите «Найти теги», чтобы увидеть результаты.</p>
+                        </div>
+                    </section>
+                </div>
+            </section>
         </main>
         <footer class="page__footer">
             <p>Данные и настройки сохраняются локально (localStorage). Работает без интернета.</p>
@@ -142,5 +217,7 @@
     <script src="js/app.dups.engine.js"></script>
     <script src="js/app.dups.js"></script>
     <script src="js/app.search.js"></script>
+    <script src="js/app.tags.engine.js"></script>
+    <script src="js/app.tags.js"></script>
 </body>
 </html>

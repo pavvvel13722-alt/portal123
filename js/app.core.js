@@ -29,6 +29,16 @@
                 }
             ]
         },
+        tags: {
+            stopPhrases: 'добрый день\nздравствуйте\nспасибо\nс уважением\nпрошу помочь',
+            stopTokens: 'ошибка\nпроблема\nсистема\nсообщает\nпросит\nнужно',
+            domainTokens: 'vpn\nvrm\nrdp\nmstsc\nnla\ncredssp\nсертификат\ncrypto pro\nкриптопро\nудалённый\nудаленный\ngateway',
+            lenBoost1: 1,
+            lenBoost2: 1.25,
+            lenBoost3: 1.45,
+            domainBoost: 1.15,
+            coverageThreshold: 0.7
+        },
         ui: {
             theme: 'light'
         }
@@ -107,6 +117,32 @@
         }
         const theme = String(settings.ui.theme || DEFAULTS.ui.theme).toLowerCase();
         settings.ui.theme = theme === 'dark' ? 'dark' : 'light';
+
+        if (!settings.tags || typeof settings.tags !== 'object') {
+            settings.tags = deepClone(DEFAULTS.tags);
+        } else {
+            const tagSettings = settings.tags;
+            if (typeof tagSettings.stopPhrases !== 'string') {
+                tagSettings.stopPhrases = DEFAULTS.tags.stopPhrases;
+            }
+            if (typeof tagSettings.stopTokens !== 'string') {
+                tagSettings.stopTokens = DEFAULTS.tags.stopTokens;
+            }
+            if (typeof tagSettings.domainTokens !== 'string') {
+                tagSettings.domainTokens = DEFAULTS.tags.domainTokens;
+            }
+            const ensureFloat = (value, fallback) => {
+                const num = Number(value);
+                return Number.isFinite(num) ? num : fallback;
+            };
+            tagSettings.lenBoost1 = ensureFloat(tagSettings.lenBoost1, DEFAULTS.tags.lenBoost1);
+            tagSettings.lenBoost2 = ensureFloat(tagSettings.lenBoost2, DEFAULTS.tags.lenBoost2);
+            tagSettings.lenBoost3 = ensureFloat(tagSettings.lenBoost3, DEFAULTS.tags.lenBoost3);
+            tagSettings.domainBoost = ensureFloat(tagSettings.domainBoost, DEFAULTS.tags.domainBoost);
+            tagSettings.coverageThreshold = ensureFloat(tagSettings.coverageThreshold, DEFAULTS.tags.coverageThreshold);
+            if (tagSettings.coverageThreshold < 0) tagSettings.coverageThreshold = 0;
+            if (tagSettings.coverageThreshold > 1) tagSettings.coverageThreshold = 1;
+        }
         return settings;
     }
 
@@ -207,6 +243,15 @@
         document.getElementById('btn-export-duplicates').disabled = !enabled;
         document.getElementById('btn-run-search').disabled = !enabled;
         document.getElementById('btn-export-search').disabled = !enabled;
+        const tagButtons = [
+            'btn-run-tags',
+            'btn-export-tags-csv',
+            'btn-export-tags-json'
+        ];
+        tagButtons.forEach((id) => {
+            const node = document.getElementById(id);
+            if (node) node.disabled = !enabled;
+        });
     }
 
     async function readFileAsText(file) {

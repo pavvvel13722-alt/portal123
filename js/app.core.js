@@ -28,6 +28,9 @@
                     keywords: ['смена пароля', 'сброс пароля', 'учётка заблокирована', 'не помню пароль', 'vtb pro не пускает']
                 }
             ]
+        },
+        ui: {
+            theme: 'light'
         }
     };
 
@@ -99,12 +102,18 @@
             DEFAULTS.duplicates.timeGuardDays
         );
         if (dup.timeGuardDays < 0) dup.timeGuardDays = 0;
+        if (!settings.ui || typeof settings.ui !== 'object') {
+            settings.ui = { ...DEFAULTS.ui };
+        }
+        const theme = String(settings.ui.theme || DEFAULTS.ui.theme).toLowerCase();
+        settings.ui.theme = theme === 'dark' ? 'dark' : 'light';
         return settings;
     }
 
     function init() {
         setupTabs();
         setupFileUpload();
+        setupThemeToggle();
         document.dispatchEvent(new CustomEvent('app:ready', { detail: { settings: state.settings } }));
     }
 
@@ -161,6 +170,36 @@
                 toggleButtons(false);
             }
         });
+    }
+
+    function setupThemeToggle() {
+        const button = document.getElementById('theme-toggle');
+        const initialTheme = state.settings.ui?.theme || DEFAULTS.ui.theme;
+        applyTheme(initialTheme);
+        if (!button) return;
+        updateThemeButton(button, initialTheme);
+        button.addEventListener('click', () => {
+            const current = state.settings.ui?.theme === 'dark' ? 'dark' : 'light';
+            const next = current === 'dark' ? 'light' : 'dark';
+            state.settings.ui = state.settings.ui || {};
+            state.settings.ui.theme = next;
+            applyTheme(next);
+            updateThemeButton(button, next);
+            saveSettings();
+            document.dispatchEvent(new CustomEvent('app:settings-update', { detail: { group: 'ui', key: 'theme', value: next } }));
+        });
+    }
+
+    function applyTheme(theme) {
+        const normalized = theme === 'dark' ? 'dark' : 'light';
+        document.documentElement.dataset.theme = normalized;
+        document.body.classList.toggle('theme-dark', normalized === 'dark');
+    }
+
+    function updateThemeButton(button, theme) {
+        const isDark = theme === 'dark';
+        button.textContent = isDark ? '☀️ Светлая тема' : '🌙 Тёмная тема';
+        button.setAttribute('aria-pressed', String(isDark));
     }
 
     function toggleButtons(enabled) {
@@ -460,7 +499,8 @@
         updateSetting,
         replaceGroup,
         mountSettings,
-        getSettingValue
+        getSettingValue,
+        applyTheme
     };
 
     document.addEventListener('DOMContentLoaded', init);

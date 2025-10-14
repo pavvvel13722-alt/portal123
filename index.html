@@ -14,10 +14,13 @@
                 <h1>Портал обработки обращений</h1>
                 <p>Работает офлайн, данные остаются локально</p>
             </div>
-            <div class="upload">
-                <label for="csv-file" class="upload__label">📁 Загрузить CSV (Windows-1251)</label>
-                <input type="file" id="csv-file" accept=".csv" />
-                <span id="upload-info" class="upload__info">Файл не загружен</span>
+            <div class="header-controls">
+                <button id="theme-toggle" class="button button--ghost" type="button" aria-label="Переключить тему">🌙 Тёмная тема</button>
+                <div class="upload">
+                    <label for="csv-file" class="upload__label">📁 Загрузить CSV (Windows-1251)</label>
+                    <input type="file" id="csv-file" accept=".csv" />
+                    <span id="upload-info" class="upload__info">Файл не загружен</span>
+                </div>
             </div>
         </header>
         <nav class="tabs" role="tablist">
@@ -46,25 +49,43 @@
                         <div class="categories">
                             <div class="categories__header">
                                 <h3>Категории</h3>
-                                <button id="btn-add-category" class="button button--ghost">➕ Добавить</button>
+                                <div class="categories__actions">
+                                    <button id="btn-import-categories" class="button button--ghost" type="button">📥 Импорт</button>
+                                    <button id="btn-export-categories" class="button button--ghost" type="button">📤 Экспорт</button>
+                                    <button id="btn-add-category" class="button button--primary" type="button">➕ Добавить</button>
+                                </div>
                             </div>
                             <ul id="category-list" class="categories__list"></ul>
                         </div>
+                        <input type="file" id="category-import-input" accept="application/json" hidden>
                     </aside>
                     <section class="search-layout__content">
                         <div class="search-bar">
-                            <input type="text" id="search-query" placeholder="Поиск по обращениям" autocomplete="off" />
-                            <div id="search-keywords" class="chips"></div>
+                            <div class="search-bar__inputs">
+                                <input type="text" id="search-query" placeholder="Поиск по обращениям" autocomplete="off" />
+                                <div id="search-keywords" class="chips"></div>
+                            </div>
                             <div class="filters">
-                                <label>Дата с <input type="date" id="filter-date-from"></label>
-                                <label>по <input type="date" id="filter-date-to"></label>
-                                <label>Приоритет <input type="text" id="filter-priority" placeholder="например, Высокий"></label>
-                                <label>Статус <input type="text" id="filter-status" placeholder="например, В работе"></label>
-                                <label>Сервис <input type="text" id="filter-service" placeholder="например, ВРМ"></label>
+                                <label class="filter">
+                                    <span>Статус</span>
+                                    <select id="filter-status">
+                                        <option value="">Все статусы</option>
+                                    </select>
+                                </label>
+                                <label class="filter">
+                                    <span>Приоритет</span>
+                                    <select id="filter-priority">
+                                        <option value="">Все приоритеты</option>
+                                    </select>
+                                </label>
                             </div>
                             <div class="search-actions">
-                                <button id="btn-run-search" class="button button--primary" disabled>🔎 Найти</button>
-                                <button id="btn-export-search" class="button" disabled>📤 Экспорт результатов (CSV)</button>
+                                <div id="search-result-count" class="search-result-count">Найдено: 0</div>
+                                <div class="search-actions__buttons">
+                                    <button id="btn-reset-filters" class="button button--ghost" type="button">↺ Сбросить фильтры</button>
+                                    <button id="btn-run-search" class="button button--primary" type="button" disabled>🔎 Найти</button>
+                                    <button id="btn-export-search" class="button" type="button" disabled>📤 Экспорт результатов (CSV)</button>
+                                </div>
                             </div>
                         </div>
                         <div id="search-results" class="results"></div>
@@ -75,6 +96,35 @@
         <footer class="page__footer">
             <p>Данные и настройки сохраняются локально (localStorage). Работает без интернета.</p>
         </footer>
+    </div>
+    <div class="modal" id="category-modal" aria-hidden="true" role="dialog" aria-modal="true">
+        <div class="modal__backdrop" data-modal-close></div>
+        <div class="modal__dialog">
+            <form id="category-form" class="modal__content">
+                <div class="modal__header">
+                    <h3 id="category-modal-title">Категория</h3>
+                    <button type="button" class="modal__close" data-modal-close aria-label="Закрыть">✕</button>
+                </div>
+                <div class="modal__body">
+                    <label class="modal__field">
+                        <span>Название</span>
+                        <input type="text" id="category-name" required />
+                    </label>
+                    <label class="modal__field">
+                        <span>Ключевые слова</span>
+                        <textarea id="category-keywords" placeholder="по одному на строку или через ;" required></textarea>
+                    </label>
+                    <label class="modal__field">
+                        <span>Порог (≥)</span>
+                        <input type="number" id="category-threshold" min="0" step="1" required />
+                    </label>
+                </div>
+                <div class="modal__footer">
+                    <button type="button" class="button button--ghost" data-modal-close>Отмена</button>
+                    <button type="submit" class="button button--primary">Сохранить</button>
+                </div>
+            </form>
+        </div>
     </div>
     <script src="js/vendor/papaparse.min.js"></script>
     <script src="js/vendor/flexsearch.min.js"></script>

@@ -324,9 +324,12 @@
                 raw.forEach((entry) => {
                     const normalized = entry.trim().toLowerCase().replace(/ё/g, 'е');
                     if (!normalized) return;
-                    if (seen.has(normalized)) return;
-                    seen.add(normalized);
-                    phrases.push(normalized);
+                    const tokens = normalized.split(/\s+/).filter(Boolean);
+                    if (!tokens.length) return;
+                    const key = tokens.join(' ');
+                    if (seen.has(key)) return;
+                    seen.add(key);
+                    phrases.push(tokens);
                 });
                 return phrases;
             }
@@ -376,12 +379,11 @@
                 cleaned = cleaned.replace(/&[a-z#0-9]+;/gi, ' ');
                 cleaned = cleaned.replace(/[^a-zа-я0-9\s]+/gi, ' ');
                 cleaned = cleaned.replace(/\s+/g, ' ').trim();
-                if (stopPhrases && stopPhrases.length) {
-                    cleaned = removeStopPhrases(cleaned, stopPhrases);
-                }
-                cleaned = cleaned.replace(/\s+/g, ' ').trim();
                 const rawTokens = cleaned ? cleaned.match(/[a-zа-я0-9]+/g) : null;
-                const tokens = rawTokens ? mapTechnicalTokens(rawTokens) : [];
+                const filteredTokens = (stopPhrases && stopPhrases.length)
+                    ? removeStopPhrases(rawTokens || [], stopPhrases)
+                    : (rawTokens || []);
+                const tokens = filteredTokens.length ? mapTechnicalTokens(filteredTokens) : [];
                 const tokenPairs = tokens.map((token) => {
                     const surface = token;
                     const stem = stemToken(token);
@@ -396,14 +398,51 @@
                 };
             }
 
-            function removeStopPhrases(text, stopPhrases) {
-                let result = text;
-                stopPhrases.forEach((phrase) => {
-                    const parts = phrase.split(/\s+/).filter(Boolean).map(escapeRegExp);
-                    if (!parts.length) return;
-                    const pattern = new RegExp('(?:^|\\s)(' + parts.join('\\s+') + ')(?=\\s|$)', 'g');
-                    result = result.replace(pattern, ' ');
+            function removeStopPhrases(tokens, stopPhrases) {
+                if (!tokens.length || !stopPhrases.length) return tokens;
+                const lookup = new Map();
+                stopPhrases.forEach((phraseTokens) => {
+                    if (!Array.isArray(phraseTokens) || !phraseTokens.length) return;
+                    const first = phraseTokens[0];
+                    if (!lookup.has(first)) {
+                        lookup.set(first, []);
+                    }
+                    lookup.get(first).push(phraseTokens);
                 });
+                lookup.forEach((list) => {
+                    list.sort((a, b) => b.length - a.length);
+                });
+                const result = [];
+                let index = 0;
+                while (index < tokens.length) {
+                    const token = tokens[index];
+                    const candidates = lookup.get(token);
+                    let matched = false;
+                    if (candidates && candidates.length) {
+                        for (let i = 0; i < candidates.length; i += 1) {
+                            const phrase = candidates[i];
+                            if (phrase.length > tokens.length - index) {
+                                continue;
+                            }
+                            let ok = true;
+                            for (let j = 1; j < phrase.length; j += 1) {
+                                if (tokens[index + j] !== phrase[j]) {
+                                    ok = false;
+                                    break;
+                                }
+                            }
+                            if (ok) {
+                                index += phrase.length;
+                                matched = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!matched) {
+                        result.push(token);
+                        index += 1;
+                    }
+                }
                 return result;
             }
 

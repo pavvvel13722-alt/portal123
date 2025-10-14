@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Аналитика обращений VTB</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="page">
+        <header class="page__header">
+            <div class="brand">
+                <h1>Портал обработки обращений</h1>
+                <p>Работает офлайн, данные остаются локально</p>
+            </div>
+            <div class="upload">
+                <label for="csv-file" class="upload__label">📁 Загрузить CSV (Windows-1251)</label>
+                <input type="file" id="csv-file" accept=".csv" />
+                <span id="upload-info" class="upload__info">Файл не загружен</span>
+            </div>
+        </header>
+        <nav class="tabs" role="tablist">
+            <button class="tabs__tab tabs__tab--active" data-tab="duplicates" role="tab" aria-selected="true">Дубли обращений</button>
+            <button class="tabs__tab" data-tab="search" role="tab" aria-selected="false">Поиск по обращениям</button>
+        </nav>
+        <main class="tab-content">
+            <section id="tab-duplicates" class="tab-panel tab-panel--active" role="tabpanel" aria-labelledby="duplicates">
+                <div class="panel-header">
+                    <h2>Дубли обращений</h2>
+                    <div class="settings" id="duplicate-settings"></div>
+                </div>
+                <div class="actions">
+                    <button id="btn-run-duplicates" class="button button--primary" disabled>🔍 Найти дубли</button>
+                    <button id="btn-export-duplicates" class="button" disabled>📤 Экспорт дублей (CSV)</button>
+                </div>
+                <div id="duplicate-results" class="results"></div>
+            </section>
+            <section id="tab-search" class="tab-panel" role="tabpanel" aria-labelledby="search">
+                <div class="panel-header">
+                    <h2>Поиск по обращениям</h2>
+                    <div class="settings" id="search-settings"></div>
+                </div>
+                <div class="search-layout">
+                    <aside class="search-layout__sidebar">
+                        <div class="categories">
+                            <div class="categories__header">
+                                <h3>Категории</h3>
+                                <button id="btn-add-category" class="button button--ghost">➕ Добавить</button>
+                            </div>
+                            <ul id="category-list" class="categories__list"></ul>
+                        </div>
+                    </aside>
+                    <section class="search-layout__content">
+                        <div class="search-bar">
+                            <input type="text" id="search-query" placeholder="Поиск по обращениям" autocomplete="off" />
+                            <div id="search-keywords" class="chips"></div>
+                            <div class="filters">
+                                <label>Дата с <input type="date" id="filter-date-from"></label>
+                                <label>по <input type="date" id="filter-date-to"></label>
+                                <label>Приоритет <input type="text" id="filter-priority" placeholder="например, Высокий"></label>
+                                <label>Статус <input type="text" id="filter-status" placeholder="например, В работе"></label>
+                                <label>Сервис <input type="text" id="filter-service" placeholder="например, ВРМ"></label>
+                            </div>
+                            <div class="search-actions">
+                                <button id="btn-run-search" class="button button--primary" disabled>🔎 Найти</button>
+                                <button id="btn-export-search" class="button" disabled>📤 Экспорт результатов (CSV)</button>
+                            </div>
+                        </div>
+                        <div id="search-results" class="results"></div>
+                    </section>
+                </div>
+            </section>
+        </main>
+        <footer class="page__footer">
+            <p>Данные и настройки сохраняются локально (localStorage). Работает без интернета.</p>
+        </footer>
+    </div>
+    <script src="js/vendor/papaparse.min.js"></script>
+    <script src="js/vendor/flexsearch.min.js"></script>
+    <script src="js/app.core.js"></script>
+    <script src="js/app.dups.js"></script>
+    <script src="js/app.search.js"></script>
+</body>
+</html>

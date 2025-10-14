@@ -5,6 +5,8 @@
     let currentClusters = [];
     let lastAnalysisMeta = null;
     let settingsContainer = null;
+    const DuplicateEngine = buildDuplicateEngineFromScript();
+    let pendingJob = null;
 
     document.addEventListener('app:ready', ({ detail }) => {
         settingsContainer = document.getElementById('duplicate-settings');
@@ -36,6 +38,7 @@
         currentRecords = detail.records;
         currentClusters = [];
         lastAnalysisMeta = null;
+        pendingJob = null;
         renderClusters([], null);
     });
 
@@ -44,6 +47,11 @@
         const settings = AppCore.getSettings().duplicates;
         document.getElementById('btn-run-duplicates').textContent = '⏳ Обработка…';
         document.getElementById('btn-run-duplicates').disabled = true;
+        const payload = {
+            records: prepareWorkerPayload(currentRecords),
+            settings
+        };
+        pendingJob = payload;
         try {
             const instance = ensureWorker();
             if (!instance) {
@@ -51,16 +59,14 @@
             }
             instance.postMessage({
                 type: 'analyze',
-                payload: {
-                    records: prepareWorkerPayload(currentRecords),
-                    settings
-                }
+                payload
             });
         } catch (error) {
             console.error('Failed to start duplicate analysis', error);
             alert('Не удалось запустить анализ дублей. Подробности в консоли.');
             resetRunButton();
             teardownWorker();
+            runDuplicatesFallback();
         }
     });
 
@@ -96,11 +102,13 @@
             lastAnalysisMeta = payload.meta;
             renderClusters(currentClusters, lastAnalysisMeta);
             resetRunButton();
+            pendingJob = null;
         }
         if (type === 'analysis-error') {
             console.error('Duplicate analysis failed', payload?.error);
             alert('Не удалось выполнить анализ дублей. Подробности в консоли.');
             resetRunButton();
+            runDuplicatesFallback();
         }
     }
 
@@ -109,6 +117,7 @@
         alert('Произошла ошибка Web Worker. Проверьте консоль.');
         resetRunButton();
         teardownWorker();
+        runDuplicatesFallback();
     }
 
     function resetRunButton() {
@@ -131,6 +140,9 @@
         }
         teardownWorker();
         const created = createWorker();
+        if (!created) {
+            return null;
+        }
         worker = created.worker;
         workerUrl = created.url;
         const releaseUrl = () => {
@@ -303,8 +315,42 @@
         }
     }
 
-    function createWorker() {
-        const script = `
+    function buildDuplicateEngineFromScript() {
+        try {
+            const script = getWorkerScript();
+            const core = script.replace(/self\.onmessage\s*=\s*\(event\)\s*=>\s*\{[\s\S]*?\n\s*\};/, '');
+            const factory = new Function(core + '\nreturn { analyze, serializeError };');
+            return factory();
+        } catch (error) {
+            console.error('Не удалось подготовить резервный движок дублей', error);
+            return {
+                analyze: () => ({ clusters: [], meta: null }),
+                serializeError: (err) => ({ message: String(err || 'Unknown error') })
+            };
+        }
+    }
+
+    function runDuplicatesFallback() {
+        if (!pendingJob || !pendingJob.records || !pendingJob.records.length) {
+            pendingJob = null;
+            return;
+        }
+        try {
+            const result = DuplicateEngine.analyze(pendingJob.records, pendingJob.settings || {});
+            currentClusters = result.clusters || [];
+            lastAnalysisMeta = result.meta || null;
+            renderClusters(currentClusters, lastAnalysisMeta);
+        } catch (error) {
+            console.error('Fallback duplicate analysis failed', error);
+            alert('Не удалось выполнить анализ дублей. Подробности в консоли.');
+        } finally {
+            resetRunButton();
+            pendingJob = null;
+        }
+    }
+
+    function getWorkerScript() {
+        return `
             const STEM_SUFFIXES = ['иями', 'ями', 'ами', 'ий', 'ый', 'ой', 'ая', 'яя', 'ое', 'ее', 'ие', 'ые', 'ого', 'его', 'ому', 'ему', 'ах', 'ях', 'ов', 'ев', 'ым', 'им', 'ам', 'ям', 'ую', 'юю', 'ешь', 'ишь', 'ать', 'ять', 'ить', 'еть', 'тся', 'ться', 'лся', 'лась', 'лось', 'лись'];
             const TECH_TOKEN_MAP = {
                 'врм': 'vrm',
@@ -1047,9 +1093,18 @@
             }
 
         `;
-        const blob = new Blob([script], { type: 'application/javascript' });
-        const url = URL.createObjectURL(blob);
-        const worker = new Worker(url);
-        return { worker, url };
+    }
+
+    function createWorker() {
+        try {
+            const script = getWorkerScript();
+            const blob = new Blob([script], { type: 'application/javascript' });
+            const url = URL.createObjectURL(blob);
+            const worker = new Worker(url);
+            return { worker, url };
+        } catch (error) {
+            console.error('Не удалось создать воркер дублей', error);
+            return null;
+        }
     }
 })();

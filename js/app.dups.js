@@ -1,5 +1,6 @@
 (function () {
-    const worker = createWorker();
+    let worker = null;
+    let workerUrl = null;
     let currentRecords = [];
     let currentClusters = [];
     let lastAnalysisMeta = null;
@@ -22,6 +23,7 @@
             'duplicates'
         );
         syncSettingsState();
+        setupWorker();
     });
 
     document.addEventListener('app:settings-update', ({ detail }) => {
@@ -42,13 +44,24 @@
         const settings = AppCore.getSettings().duplicates;
         document.getElementById('btn-run-duplicates').textContent = '⏳ Обработка…';
         document.getElementById('btn-run-duplicates').disabled = true;
-        worker.postMessage({
-            type: 'analyze',
-            payload: {
-                records: currentRecords,
-                settings
+        try {
+            const instance = ensureWorker();
+            if (!instance) {
+                throw new Error('Не удалось создать Web Worker');
             }
-        });
+            instance.postMessage({
+                type: 'analyze',
+                payload: {
+                    records: prepareWorkerPayload(currentRecords),
+                    settings
+                }
+            });
+        } catch (error) {
+            console.error('Failed to start duplicate analysis', error);
+            alert('Не удалось запустить анализ дублей. Подробности в консоли.');
+            resetRunButton();
+            teardownWorker();
+        }
     });
 
     document.getElementById('btn-export-duplicates').addEventListener('click', () => {
@@ -76,29 +89,92 @@
         URL.revokeObjectURL(link.href);
     });
 
-    worker.addEventListener('message', (event) => {
-        const { type, payload } = event.data;
+    function handleWorkerMessage(event) {
+        const { type, payload } = event.data || {};
         if (type === 'analysis-complete') {
             currentClusters = payload.clusters;
             lastAnalysisMeta = payload.meta;
             renderClusters(currentClusters, lastAnalysisMeta);
-            document.getElementById('btn-run-duplicates').textContent = '🔍 Найти дубли';
-            document.getElementById('btn-run-duplicates').disabled = false;
+            resetRunButton();
         }
         if (type === 'analysis-error') {
             console.error('Duplicate analysis failed', payload?.error);
             alert('Не удалось выполнить анализ дублей. Подробности в консоли.');
-            document.getElementById('btn-run-duplicates').textContent = '🔍 Найти дубли';
-            document.getElementById('btn-run-duplicates').disabled = false;
+            resetRunButton();
         }
-    });
+    }
 
-    worker.addEventListener('error', (event) => {
-        console.error('Duplicate worker runtime error', event.message);
+    function handleWorkerError(event) {
+        console.error('Duplicate worker runtime error', event?.message, event?.error || '');
         alert('Произошла ошибка Web Worker. Проверьте консоль.');
-        document.getElementById('btn-run-duplicates').textContent = '🔍 Найти дубли';
-        document.getElementById('btn-run-duplicates').disabled = false;
-    });
+        resetRunButton();
+        teardownWorker();
+    }
+
+    function resetRunButton() {
+        const runButton = document.getElementById('btn-run-duplicates');
+        if (runButton) {
+            runButton.textContent = '🔍 Найти дубли';
+            runButton.disabled = false;
+        }
+    }
+
+    function ensureWorker() {
+        if (worker) return worker;
+        return setupWorker();
+    }
+
+    function setupWorker() {
+        if (typeof Worker === 'undefined') {
+            console.error('Web Worker API недоступен в этом окружении');
+            return null;
+        }
+        teardownWorker();
+        const created = createWorker();
+        worker = created.worker;
+        workerUrl = created.url;
+        const releaseUrl = () => {
+            if (workerUrl) {
+                URL.revokeObjectURL(workerUrl);
+                workerUrl = null;
+            }
+        };
+        worker.addEventListener('message', releaseUrl, { once: true });
+        worker.addEventListener('message', handleWorkerMessage);
+        worker.addEventListener('error', handleWorkerError);
+        return worker;
+    }
+
+    function teardownWorker() {
+        if (worker) {
+            try {
+                worker.terminate();
+            } catch (err) {
+                console.warn('Не удалось завершить воркер дублей', err);
+            }
+            worker = null;
+        }
+        if (workerUrl) {
+            URL.revokeObjectURL(workerUrl);
+            workerUrl = null;
+        }
+    }
+
+    function prepareWorkerPayload(records) {
+        if (!Array.isArray(records)) return [];
+        return records.map((record) => ({
+            id: record.id || '',
+            author: record.author || '',
+            requester: record.requester || '',
+            contact: record.contact || '',
+            description: record.description || '',
+            createdAt: record.createdAt || '',
+            priority: record.priority || '',
+            status: record.status || '',
+            sla: record.sla || '',
+            dueAt: record.dueAt || ''
+        }));
+    }
 
     function syncSettingsState() {
         if (!settingsContainer) return;
@@ -974,9 +1050,6 @@
         const blob = new Blob([script], { type: 'application/javascript' });
         const url = URL.createObjectURL(blob);
         const worker = new Worker(url);
-        worker.addEventListener('message', () => {
-            URL.revokeObjectURL(url);
-        }, { once: true });
-        return worker;
+        return { worker, url };
     }
 })();

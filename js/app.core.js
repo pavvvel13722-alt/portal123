@@ -98,15 +98,12 @@
             info.textContent = 'Загружается…';
             try {
                 const text = await readFileAsText(file);
-                const parsed = Papa.parse(text, {
-                    header: true,
-                    skipEmptyLines: true,
-                    delimiter: detectDelimiter(text),
-                    transformHeader: (header) => header.trim(),
-                    transform: (value) => (typeof value === 'string' ? value.trim() : value)
-                });
+                const delimiter = detectDelimiter(text);
+                const parsed = parseCsv(text, { delimiter, header: true, skipEmptyLines: true });
                 const columns = parsed.meta.fields || [];
-                const cleaned = (parsed.data || []).filter(Boolean).map((row) => normalizeRow(row, columns));
+                const cleaned = (parsed.data || [])
+                    .filter(Boolean)
+                    .map((row) => normalizeRow(row, columns));
                 state.records = cleaned;
                 state.columns = columns;
                 state.fileName = file.name;
@@ -142,18 +139,19 @@
 
     function detectDelimiter(text) {
         const candidates = [';', ',', '\t', '|'];
-        const lines = text.split(/\r?\n/).filter(Boolean).slice(0, 50);
+        const sample = extractSample(text, 250);
         let best = candidates[0];
         let bestScore = -Infinity;
 
         for (const delimiter of candidates) {
-            const counts = lines
-                .map((line) => countColumns(line, delimiter))
-                .filter((count) => count > 1);
-            if (!counts.length) continue;
-            const average = counts.reduce((sum, value) => sum + value, 0) / counts.length;
-            const variance = counts.reduce((sum, value) => sum + Math.pow(value - average, 2), 0) / counts.length;
-            const score = average - variance;
+            const parsed = parseCsv(sample, { delimiter, header: false, skipEmptyLines: true });
+            if (!parsed.data || !parsed.data.length) continue;
+            const lengths = parsed.data
+                .map((row) => (Array.isArray(row) ? row.length : Object.keys(row || {}).length))
+                .filter((length) => length > 1);
+            if (!lengths.length) continue;
+            const stats = getLengthStats(lengths);
+            const score = stats.consistency * 1000 + stats.modeLength;
             if (score > bestScore) {
                 bestScore = score;
                 best = delimiter;
@@ -163,24 +161,132 @@
         return best;
     }
 
-    function countColumns(line, delimiter) {
-        let count = 1;
+    function extractSample(text, maxRows) {
         let inQuotes = false;
-        for (let i = 0; i < line.length; i += 1) {
-            const char = line[i];
+        let rows = 0;
+        for (let i = 0; i < text.length; i += 1) {
+            const char = text[i];
             if (char === '"') {
-                if (inQuotes && line[i + 1] === '"') {
+                if (inQuotes && text[i + 1] === '"') {
                     i += 1;
                 } else {
                     inQuotes = !inQuotes;
                 }
-            } else if (!inQuotes && char === delimiter) {
-                count += 1;
-            } else if (!inQuotes && delimiter === '\t' && char === '\t') {
-                count += 1;
+            } else if (!inQuotes && (char === '\n' || char === '\r')) {
+                rows += 1;
+                if (rows >= maxRows) {
+                    return text.slice(0, i);
+                }
+                if (char === '\r' && text[i + 1] === '\n') {
+                    i += 1;
+                }
             }
         }
-        return count;
+        return text;
+    }
+
+    function getLengthStats(lengths) {
+        const counts = new Map();
+        lengths.forEach((length) => {
+            counts.set(length, (counts.get(length) || 0) + 1);
+        });
+        let modeLength = 0;
+        let modeCount = 0;
+        counts.forEach((count, length) => {
+            if (count > modeCount) {
+                modeLength = length;
+                modeCount = count;
+            }
+        });
+        const consistency = modeCount / lengths.length;
+        return { modeLength, consistency };
+    }
+
+    function parseCsv(text, options) {
+        const delimiter = options?.delimiter ?? ',';
+        const skipEmptyLines = Boolean(options?.skipEmptyLines);
+        const header = Boolean(options?.header);
+        const rows = [];
+        const delimiterLength = delimiter.length;
+        let field = '';
+        let row = [];
+        let inQuotes = false;
+
+        const pushField = () => {
+            row.push(field);
+            field = '';
+        };
+
+        const pushRow = () => {
+            const isEmpty = row.every((value) => {
+                const str = value == null ? '' : String(value);
+                return str.trim().length === 0;
+            });
+            if (!(skipEmptyLines && isEmpty)) {
+                rows.push(row.slice());
+            }
+            row = [];
+        };
+
+        for (let i = 0; i < text.length; i += 1) {
+            const char = text[i];
+            if (char === '"') {
+                if (inQuotes && text[i + 1] === '"') {
+                    field += '"';
+                    i += 1;
+                } else {
+                    inQuotes = !inQuotes;
+                }
+                continue;
+            }
+
+            if (!inQuotes) {
+                if (
+                    (delimiterLength === 1 && char === delimiter) ||
+                    (delimiterLength > 1 && text.slice(i, i + delimiterLength) === delimiter)
+                ) {
+                    pushField();
+                    if (delimiterLength > 1) {
+                        i += delimiterLength - 1;
+                    }
+                    continue;
+                }
+
+                if (char === '\n' || char === '\r') {
+                    pushField();
+                    pushRow();
+                    if (char === '\r' && text[i + 1] === '\n') {
+                        i += 1;
+                    }
+                    continue;
+                }
+            }
+
+            field += char;
+        }
+
+        pushField();
+        pushRow();
+
+        if (!rows.length) {
+            return { data: [], meta: { fields: header ? [] : null } };
+        }
+
+        if (!header) {
+            return { data: rows, meta: { fields: null } };
+        }
+
+        const headers = rows[0].map((item) => (item == null ? '' : String(item).trim()));
+        const dataRows = rows.slice(1).map((columns) => {
+            const entry = {};
+            headers.forEach((key, index) => {
+                const value = columns[index] != null ? columns[index] : '';
+                entry[key] = typeof value === 'string' ? value.trim() : value;
+            });
+            return entry;
+        });
+
+        return { data: dataRows, meta: { fields: headers } };
     }
 
     function normalizeRow(row, columns) {
@@ -203,7 +309,9 @@
         for (const column of columns) {
             if (!Object.prototype.hasOwnProperty.call(mapping, column)) continue;
             const key = mapping[column];
-            normalized[key] = row[column] ?? '';
+            const rawValue = row[column];
+            const cleaned = typeof rawValue === 'string' ? rawValue.trim() : rawValue;
+            normalized[key] = cleaned ?? '';
         }
         normalized.title = normalized.title || '';
         normalized.description = normalized.description || '';

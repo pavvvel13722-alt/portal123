@@ -101,6 +101,7 @@
                 const parsed = Papa.parse(text, {
                     header: true,
                     skipEmptyLines: true,
+                    delimiter: detectDelimiter(text),
                     transformHeader: (header) => header.trim(),
                     transform: (value) => (typeof value === 'string' ? value.trim() : value)
                 });
@@ -139,6 +140,25 @@
         return decoder.decode(buffer);
     }
 
+    function detectDelimiter(text) {
+        const candidates = [';', ',', '\t'];
+        const lines = text.split(/\r?\n/).slice(0, 10);
+        let best = candidates[0];
+        let bestScore = -Infinity;
+        for (const delimiter of candidates) {
+            let score = 0;
+            for (const line of lines) {
+                const count = line.split(delimiter).length;
+                if (count > 1) score += count;
+            }
+            if (score > bestScore) {
+                bestScore = score;
+                best = delimiter;
+            }
+        }
+        return best;
+    }
+
     function normalizeRow(row, columns) {
         const mapping = {
             ID: 'id',
@@ -150,8 +170,10 @@
             Создано: 'createdAt',
             'Нормативный срок': 'dueAt',
             'SLA-индикатор': 'sla',
+            'SLM-индикатор': 'sla',
             Сервис: 'service',
-            Теги: 'tags'
+            Теги: 'tags',
+            'Тэги': 'tags'
         };
         const normalized = {};
         for (const column of columns) {

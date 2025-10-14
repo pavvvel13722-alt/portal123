@@ -244,6 +244,7 @@
             const MULTI_TOKEN_PATTERNS = [
                 { sequence: ['crypto', 'pro'], replacement: 'cryptopro' }
             ];
+            const SAFE_TOKEN_PATTERN = /^[a-zа-я0-9]+$/;
 
             self.onmessage = (event) => {
                 const data = event.data || {};
@@ -730,11 +731,17 @@
                 const trimmed = String(text).trim().replace(/\s+/g, ' ');
                 const short = trimmed.length > 280 ? trimmed.slice(0, 280) + '…' : trimmed;
                 let safe = escapeHtml(short);
-                const highlightTokens = Array.from(tokens || []).filter((token) => token && token.length > 2);
+                const highlightTokens = Array.from(tokens || [])
+                    .map((token) => (token ? token.trim() : ''))
+                    .filter((token) => token && token.length > 2 && SAFE_TOKEN_PATTERN.test(token));
                 highlightTokens.sort((a, b) => b.length - a.length);
                 highlightTokens.forEach((token) => {
-                    const pattern = new RegExp('\\b' + escapeRegExp(token) + '\\b', 'gi');
-                    safe = safe.replace(pattern, (match) => '<mark>' + match + '</mark>');
+                    try {
+                        const pattern = new RegExp('\\b' + escapeRegExp(token) + '\\b', 'gi');
+                        safe = safe.replace(pattern, (match) => '<mark>' + match + '</mark>');
+                    } catch (error) {
+                        // Игнорируем токены, которые не удаётся интерпретировать как регулярное выражение.
+                    }
                 });
                 return safe;
             }

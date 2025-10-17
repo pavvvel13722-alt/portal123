@@ -1,17 +1,25 @@
 (function () {
-    if (!window.escapeHtml || !window.escapeAttribute) {
-        window.escapeHtml = function (v) {
-            v = String(v == null ? '' : v);
-            return v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-        };
-        window.escapeAttribute = function (v) {
-            v = String(v == null ? '' : v);
-            return v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/'/g, '&#39;');
-        };
-    }
-    const STORAGE_KEY = 'vtb-portal-settings';
-    const deepClone = typeof structuredClone === 'function' ? structuredClone : (value) => JSON.parse(JSON.stringify(value));
-    const DEFAULTS = {
+    if (window.escapeHtml && window.escapeAttribute) return;
+    window.escapeHtml = function (v) {
+        v = String(v == null ? '' : v);
+        return v.replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    };
+    window.escapeAttribute = function (v) {
+        v = String(v == null ? '' : v);
+        return v.replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;')
+            .replace(/'/g, '&#39;');
+    };
+})();
+
+const STORAGE_KEY = 'vtb-portal-settings';
+const deepClone = typeof structuredClone === 'function' ? structuredClone : (value) => JSON.parse(JSON.stringify(value));
+const DEFAULTS = {
         duplicates: {
             smartThreshold: true,
             thresholdShort: 0.8,

@@ -17,9 +17,10 @@
     };
 })();
 
-const STORAGE_KEY = 'vtb-portal-settings';
-const deepClone = typeof structuredClone === 'function' ? structuredClone : (value) => JSON.parse(JSON.stringify(value));
-const DEFAULTS = {
+(function () {
+    const STORAGE_KEY = 'vtb-portal-settings';
+    const deepClone = typeof structuredClone === 'function' ? structuredClone : (value) => JSON.parse(JSON.stringify(value));
+    const DEFAULTS = {
         duplicates: {
             smartThreshold: true,
             thresholdShort: 0.8,

@@ -279,8 +279,56 @@
 
     async function readFileAsText(file) {
         const buffer = await file.arrayBuffer();
-        const decoder = new TextDecoder('windows-1251');
-        return decoder.decode(buffer);
+        return decodeBuffer(buffer);
+    }
+
+    function decodeBuffer(buffer) {
+        const view = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+        const candidates = [];
+        try {
+            const utf8Decoder = new TextDecoder('utf-8');
+            const utf8Text = utf8Decoder.decode(view);
+            candidates.push({ encoding: 'utf-8', text: utf8Text, score: scoreDecodedText(utf8Text) });
+        } catch (err) {
+            console.warn('Не удалось декодировать как UTF-8', err);
+        }
+        try {
+            const winDecoder = new TextDecoder('windows-1251');
+            const winText = winDecoder.decode(view);
+            candidates.push({ encoding: 'windows-1251', text: winText, score: scoreDecodedText(winText) });
+        } catch (err) {
+            console.warn('Не удалось декодировать как Windows-1251', err);
+        }
+        if (!candidates.length) {
+            return '';
+        }
+        candidates.sort(function (a, b) {
+            if (a.score === b.score) return 0;
+            return a.score > b.score ? -1 : 1;
+        });
+        return candidates[0].text;
+    }
+
+    function scoreDecodedText(text) {
+        if (!text) return -Infinity;
+        let cyrCount = 0;
+        let replaceCount = 0;
+        let highLatinCount = 0;
+        for (let i = 0; i < text.length; i += 1) {
+            const code = text.charCodeAt(i);
+            if ((code >= 0x0410 && code <= 0x044f) || code === 0x0401 || code === 0x0451) {
+                cyrCount += 1;
+                continue;
+            }
+            if (code === 0xfffd) {
+                replaceCount += 1;
+                continue;
+            }
+            if (code >= 0x00c0 && code <= 0x00ff) {
+                highLatinCount += 1;
+            }
+        }
+        return cyrCount * 2 - replaceCount * 5 - highLatinCount;
     }
 
     function detectDelimiter(text) {

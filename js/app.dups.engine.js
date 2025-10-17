@@ -351,7 +351,13 @@
                         if (minLen === 0) {
                             threshold = 1;
                         }
-                        return { score, t3, j3, threshold };
+                        const sharedRatio = computeSharedRatio(a, b);
+                        if (sharedRatio > 0.5 && threshold > options.baseThreshold) {
+                            const adjust = Math.min(0.15, sharedRatio * 0.2);
+                            const lowered = threshold - adjust;
+                            threshold = lowered < options.baseThreshold ? options.baseThreshold : lowered;
+                        }
+                        return { score, t3, j3, threshold, sharedRatio };
                     }
         
                     function selectSmartThreshold(options, length) {
@@ -475,7 +481,34 @@
                         const t = Math.round(pair.t3 * 100);
                         const j = Math.round(pair.j3 * 100);
                         const threshold = Math.round(pair.threshold * 100);
-                        return 'T3 ' + t + '% - J3 ' + j + '% - Порог ' + threshold + '%';
+                        const ratioPart = pair.sharedRatio != null
+                            ? ' - Пересечение ' + Math.round(pair.sharedRatio * 100) + '%'
+                            : '';
+                        return 'T3 ' + t + '% - J3 ' + j + '% - Порог ' + threshold + '%' + ratioPart;
+                    }
+
+                    function computeSharedRatio(a, b) {
+                        if (!a || !b) return 0;
+                        if (!a.tokenPairs || !b.tokenPairs) return 0;
+                        if (!a.tokenPairs.length || !b.tokenPairs.length) return 0;
+                        const stemsA = new Set();
+                        for (let i = 0; i < a.tokenPairs.length; i += 1) {
+                            const pair = a.tokenPairs[i];
+                            if (pair && pair.stem) stemsA.add(pair.stem);
+                        }
+                        const stemsB = new Set();
+                        for (let j = 0; j < b.tokenPairs.length; j += 1) {
+                            const pairB = b.tokenPairs[j];
+                            if (pairB && pairB.stem) stemsB.add(pairB.stem);
+                        }
+                        if (!stemsA.size || !stemsB.size) return 0;
+                        let shared = 0;
+                        stemsA.forEach((stem) => {
+                            if (stemsB.has(stem)) shared += 1;
+                        });
+                        const minLen = Math.min(a.tokenCount || 0, b.tokenCount || 0);
+                        if (!minLen) return 0;
+                        return shared / minLen;
                     }
         
                     function buildSnippet(text, tokens) {

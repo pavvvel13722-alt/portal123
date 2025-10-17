@@ -768,4 +768,7 @@
     }
 
     global.DuplicateEngineFactory = DuplicateEngineFactory;
+    if (typeof module !== 'undefined' && module.exports) {
+        module.exports = DuplicateEngineFactory;
+    }
 })(typeof window !== 'undefined' ? window : self);

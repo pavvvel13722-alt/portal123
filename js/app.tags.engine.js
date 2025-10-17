@@ -470,4 +470,7 @@
     }
 
     global.TagEngineFactory = TagEngineFactory;
+    if (typeof module !== 'undefined' && module.exports) {
+        module.exports = TagEngineFactory;
+    }
 })(typeof window !== 'undefined' ? window : self);

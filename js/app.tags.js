@@ -136,7 +136,7 @@
         const topN = Number(document.getElementById('tag-top-n').value) || 25;
         const ngramSizes = [];
         [1, 2, 3].forEach((size) => {
-            const checkbox = document.getElementById(`tag-ngram-${size}`);
+            const checkbox = document.getElementById('tag-ngram-' + size);
             if (checkbox && checkbox.checked) {
                 ngramSizes.push(size);
             }
@@ -225,89 +225,92 @@
     function buildCardMarkup(item, editableTags) {
         const normalized = normalizeKey(item.normalizedTemplate || item.template);
         const chipHtml = buildChipMarkup(editableTags, normalized);
-        const tableRows = (item.phrases || []).slice(0, MAX_TABLE_ROWS).map((phrase) => {
-            return `
-                <tr>
-                    <td>${escapeHtml(phrase.phrase)}</td>
-                    <td>${formatInteger(phrase.tf)}</td>
-                    <td>${formatInteger(phrase.df)}</td>
-                    <td>${formatNumber(phrase.tfidf)}</td>
-                    <td>${formatNumber(phrase.score)}</td>
-                </tr>
-            `;
+        const tableRows = (item.phrases || []).slice(0, MAX_TABLE_ROWS).map(function (phrase) {
+            let rowHtml = '';
+            rowHtml += '<tr>';
+            rowHtml += '<td>' + escapeHtml(phrase.phrase) + '</td>';
+            rowHtml += '<td>' + formatInteger(phrase.tf) + '</td>';
+            rowHtml += '<td>' + formatInteger(phrase.df) + '</td>';
+            rowHtml += '<td>' + formatNumber(phrase.tfidf) + '</td>';
+            rowHtml += '<td>' + formatNumber(phrase.score) + '</td>';
+            rowHtml += '</tr>';
+            return rowHtml;
         }).join('');
-        const tableHtml = tableRows
-            ? `
-                <div class="tag-card__table">
-                    <table class="tag-table">
-                        <thead>
-                            <tr>
-                                <th>Фраза</th>
-                                <th>Частота</th>
-                                <th>DF</th>
-                                <th>TF-IDF</th>
-                                <th>Score</th>
-                            </tr>
-                        </thead>
-                        <tbody>${tableRows}</tbody>
-                    </table>
-                </div>
-            `
-            : '<p class="tag-card__empty">Подходящих фраз не найдено.</p>';
+        let tableHtml;
+        if (tableRows) {
+            tableHtml = '';
+            tableHtml += '<div class="tag-card__table">';
+            tableHtml += '<table class="tag-table">';
+            tableHtml += '<thead>';
+            tableHtml += '<tr>';
+            tableHtml += '<th>Фраза</th>';
+            tableHtml += '<th>Частота</th>';
+            tableHtml += '<th>DF</th>';
+            tableHtml += '<th>TF-IDF</th>';
+            tableHtml += '<th>Score</th>';
+            tableHtml += '</tr>';
+            tableHtml += '</thead>';
+            tableHtml += '<tbody>' + tableRows + '</tbody>';
+            tableHtml += '</table>';
+            tableHtml += '</div>';
+        } else {
+            tableHtml = '<p class="tag-card__empty">Подходящих фраз не найдено.</p>';
+        }
         const processedMeta = item.processedCount && item.processedCount !== item.documentCount
-            ? ` · учтено: ${formatInteger(item.processedCount)}`
+            ? ' - учтено: ' + formatInteger(item.processedCount)
             : '';
-        return `
-            <header class="tag-card__header">
-                <div>
-                    <h3 class="tag-card__title">Шаблон: ${escapeHtml(item.template)}</h3>
-                    <div class="tag-card__meta">Обращений: ${formatInteger(item.documentCount)}${processedMeta}</div>
-                </div>
-                <div class="tag-card__actions">
-                    <button class="button button--ghost" type="button" data-action="copy-tags" data-template="${escapeAttribute(normalized)}">📋 Копировать</button>
-                    <button class="button button--primary" type="button" data-action="save-tags" data-template="${escapeAttribute(normalized)}">💾 Сохранить</button>
-                </div>
-            </header>
-            <div class="tag-chip-list" data-chip-list="${escapeAttribute(normalized)}">
-                ${chipHtml || '<span class="tag-card__empty">Нет тегов</span>'}
-            </div>
-            <div class="tag-card__add" data-add-container="${escapeAttribute(normalized)}">
-                <input type="text" placeholder="Новый тег" data-tag-input="${escapeAttribute(normalized)}">
-                <button class="button" type="button" data-action="add-tag" data-template="${escapeAttribute(normalized)}">➕ Добавить</button>
-            </div>
-            ${tableHtml}
-        `;
+        let html = '';
+        html += '<header class="tag-card__header">';
+        html += '<div>';
+        html += '<h3 class="tag-card__title">Шаблон: ' + escapeHtml(item.template) + '</h3>';
+        html += '<div class="tag-card__meta">Обращений: ' + formatInteger(item.documentCount) + processedMeta + '</div>';
+        html += '</div>';
+        html += '<div class="tag-card__actions">';
+        html += '<button class="button button--ghost" type="button" data-action="copy-tags" data-template="' + escapeAttribute(normalized) + '">📋 Копировать</button>';
+        html += '<button class="button button--primary" type="button" data-action="save-tags" data-template="' + escapeAttribute(normalized) + '">💾 Сохранить</button>';
+        html += '</div>';
+        html += '</header>';
+        html += '<div class="tag-chip-list" data-chip-list="' + escapeAttribute(normalized) + '">';
+        html += chipHtml || '<span class="tag-card__empty">Нет тегов</span>';
+        html += '</div>';
+        html += '<div class="tag-card__add" data-add-container="' + escapeAttribute(normalized) + '">';
+        html += '<input type="text" placeholder="Новый тег" data-tag-input="' + escapeAttribute(normalized) + '">';
+        html += '<button class="button" type="button" data-action="add-tag" data-template="' + escapeAttribute(normalized) + '">➕ Добавить</button>';
+        html += '</div>';
+        html += tableHtml;
+        return html;
     }
 
     function buildChipMarkup(editableTags, templateKey) {
-        return editableTags.map((tag, index) => {
-            const scoreLabel = tag.score != null ? `score ${formatNumber(tag.score)} · freq ${formatInteger(tag.tf)}` : 'ручной';
+        return editableTags.map(function (tag, index) {
+            const scoreLabel = tag.score != null
+                ? 'score ' + formatNumber(tag.score) + ' - freq ' + formatInteger(tag.tf)
+                : 'ручной';
             const classes = ['tag-chip'];
             if (!tag.score && tag.source === 'custom') {
                 classes.push('tag-chip--custom');
             }
-            return `
-                <span class="${classes.join(' ')}" data-chip-index="${index}" data-template="${escapeAttribute(templateKey)}">
-                    <span class="tag-chip__label">
-                        <span>${escapeHtml(tag.phrase)}</span>
-                        <span class="tag-chip__score">${escapeHtml(scoreLabel)}</span>
-                    </span>
-                    <span class="tag-chip__actions">
-                        <button class="tag-chip__action" type="button" data-action="edit-tag" aria-label="Редактировать тег">✏️</button>
-                        <button class="tag-chip__action" type="button" data-action="remove-tag" aria-label="Удалить тег">✕</button>
-                    </span>
-                </span>
-            `;
+            let chipHtml = '';
+            chipHtml += '<span class="' + classes.join(' ') + '" data-chip-index="' + index + '" data-template="' + escapeAttribute(templateKey) + '">';
+            chipHtml += '<span class="tag-chip__label">';
+            chipHtml += '<span>' + escapeHtml(tag.phrase) + '</span>';
+            chipHtml += '<span class="tag-chip__score">' + escapeHtml(scoreLabel) + '</span>';
+            chipHtml += '</span>';
+            chipHtml += '<span class="tag-chip__actions">';
+            chipHtml += '<button class="tag-chip__action" type="button" data-action="edit-tag" aria-label="Редактировать тег">✏️</button>';
+            chipHtml += '<button class="tag-chip__action" type="button" data-action="remove-tag" aria-label="Удалить тег">✕</button>';
+            chipHtml += '</span>';
+            chipHtml += '</span>';
+            return chipHtml;
         }).join('');
     }
 
     function renderEmptyState() {
         if (!tagResultsContainer) return;
-        tagResultsContainer.innerHTML = `
-            <div class="empty-state">
-                <p>Выберите шаблон и нажмите «Найти теги», чтобы увидеть результаты.</p>
-            </div>
-        `;
+        tagResultsContainer.innerHTML = ''
+            + '<div class="empty-state">'
+            + '<p>Выберите шаблон и нажмите "Найти теги", чтобы увидеть результаты.</p>'
+            + '</div>';
     }
 
     function handleResultsClick(event) {
@@ -348,7 +351,7 @@
     }
 
     function applyAddTag(templateKey) {
-        const input = tagResultsContainer.querySelector(`input[data-tag-input="${cssEscape(templateKey)}"]`);
+        const input = tagResultsContainer.querySelector('input[data-tag-input="' + cssEscape(templateKey) + '"]');
         if (!input) return;
         const value = input.value.trim();
         if (!value) return;
@@ -402,7 +405,7 @@
 
     function updateChipList(templateKey) {
         const list = tagsState.editable.get(templateKey) || [];
-        const container = tagResultsContainer.querySelector(`[data-chip-list="${cssEscape(templateKey)}"]`);
+        const container = tagResultsContainer.querySelector('[data-chip-list="' + cssEscape(templateKey) + '"]');
         if (!container) return;
         const markup = buildChipMarkup(list, templateKey);
         container.innerHTML = markup || '<span class="tag-card__empty">Нет тегов</span>';
@@ -485,8 +488,12 @@
     }
 
     function resetFilters() {
-        templateSelect?.clear(true);
-        statusSelect?.clear(true);
+        if (templateSelect && typeof templateSelect.clear === 'function') {
+            templateSelect.clear(true);
+        }
+        if (statusSelect && typeof statusSelect.clear === 'function') {
+            statusSelect.clear(true);
+        }
         document.getElementById('tag-min-frequency').value = '3';
         document.getElementById('tag-min-token').value = '2';
         document.getElementById('tag-top-n').value = '25';
@@ -557,7 +564,7 @@
         const button = document.getElementById('btn-run-tags');
         if (!button) return;
         if (isBusy) {
-            button.textContent = '⏳ Обработка…';
+            button.textContent = '⏳ Обработка...';
             button.disabled = true;
         } else {
             button.textContent = '🔖 Найти теги';
@@ -614,7 +621,8 @@
             handleExtractionResult(data.payload || {});
             pendingJob = null;
         } else if (data.type === 'extraction-error') {
-            console.error('Tag worker error', data.payload?.error);
+            const payloadError = data.payload && data.payload.error ? data.payload.error : data.payload;
+            console.error('Tag worker error', payloadError);
             teardownWorker();
             runTagExtractionFallback();
         }
@@ -633,23 +641,23 @@
         if (!factory) {
             throw new Error('TagEngineFactory недоступен');
         }
-        const factorySource = `(${factory.toString()})`;
-        return `
-            const engineFactory = ${factorySource};
-            const engine = engineFactory();
-            self.onmessage = (event) => {
-                const data = event.data || {};
-                if (data.type === 'extract') {
-                    const payload = data.payload || {};
-                    try {
-                        const result = engine.extract(payload);
-                        self.postMessage({ type: 'extraction-complete', payload: result });
-                    } catch (error) {
-                        self.postMessage({ type: 'extraction-error', payload: { error: engine.serializeError(error) } });
-                    }
-                }
-            };
-        `;
+        const factorySource = '(' + factory.toString() + ')';
+        const lines = [];
+        lines.push('const engineFactory = ' + factorySource + ';');
+        lines.push('const engine = engineFactory();');
+        lines.push('self.onmessage = function (event) {');
+        lines.push('    const data = event.data || {};');
+        lines.push('    if (data.type === "extract") {');
+        lines.push('        const payload = data.payload || {};');
+        lines.push('        try {');
+        lines.push('            const result = engine.extract(payload);');
+        lines.push('            self.postMessage({ type: "extraction-complete", payload: result });');
+        lines.push('        } catch (error) {');
+        lines.push('            self.postMessage({ type: "extraction-error", payload: { error: engine.serializeError(error) } });');
+        lines.push('        }');
+        lines.push('    }');
+        lines.push('};');
+        return lines.join('\n');
     }
 
     function buildTagEngine() {
@@ -704,7 +712,7 @@
     }
 
     function createMultiSelect(id, placeholder) {
-        const root = document.querySelector(`[data-multi="${id}"]`);
+        const root = document.querySelector('[data-multi="' + id + '"]');
         const hiddenInput = document.getElementById(id);
         if (!root || !hiddenInput) {
             return {
@@ -729,7 +737,7 @@
                 return;
             }
             const labels = Array.from(state.selected.values());
-            labelNode.textContent = labels.length <= 2 ? labels.join(', ') : `Выбрано: ${labels.length}`;
+            labelNode.textContent = labels.length <= 2 ? labels.join(', ') : 'Выбрано: ' + labels.length;
         }
         function syncHidden() {
             hiddenInput.value = Array.from(state.selected.keys()).join(',');
@@ -737,7 +745,9 @@
         function close() {
             root.classList.remove('multi-select--open');
             dropdown.hidden = true;
-            trigger?.setAttribute('aria-expanded', 'false');
+            if (trigger) {
+                trigger.setAttribute('aria-expanded', 'false');
+            }
             if (openMultiSelectInstance === api) {
                 openMultiSelectInstance = null;
                 openMultiSelectRoot = null;
@@ -750,7 +760,9 @@
             }
             root.classList.add('multi-select--open');
             dropdown.hidden = false;
-            trigger?.setAttribute('aria-expanded', 'true');
+            if (trigger) {
+                trigger.setAttribute('aria-expanded', 'true');
+            }
             openMultiSelectInstance = api;
             openMultiSelectRoot = root;
         }
@@ -769,6 +781,9 @@
             });
             syncHidden();
             updateLabel();
+            if (!silent && hadSelection && typeof onChange === 'function') {
+                onChange();
+            }
         }
         function applyOptions(options) {
             state.options = options
@@ -793,13 +808,13 @@
             state.options.forEach((option, index) => {
                 const item = document.createElement('li');
                 item.className = 'multi-select__item';
-                const checkboxId = `${id}-${index}`;
-                item.innerHTML = `
-                    <label for="${escapeAttribute(checkboxId)}">
-                        <input type="checkbox" id="${escapeAttribute(checkboxId)}" value="${escapeAttribute(option.normalized)}">
-                        <span>${escapeHtml(option.label)}</span>
-                    </label>
-                `;
+                const checkboxId = id + '-' + index;
+                let itemHtml = '';
+                itemHtml += '<label for="' + escapeAttribute(checkboxId) + '">';
+                itemHtml += '<input type="checkbox" id="' + escapeAttribute(checkboxId) + '" value="' + escapeAttribute(option.normalized) + '">';
+                itemHtml += '<span>' + escapeHtml(option.label) + '</span>';
+                itemHtml += '</label>';
+                item.innerHTML = itemHtml;
                 list.appendChild(item);
             });
             dropdown.appendChild(list);
@@ -836,19 +851,21 @@
             updateLabel();
         });
         dropdown.addEventListener('click', (event) => event.stopPropagation());
-        trigger?.addEventListener('click', (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            toggle();
-        });
-        trigger?.addEventListener('keydown', (event) => {
-            if (event.key === ' ' || event.key === 'Enter') {
+        if (trigger) {
+            trigger.addEventListener('click', (event) => {
                 event.preventDefault();
+                event.stopPropagation();
                 toggle();
-            } else if (event.key === 'Escape') {
-                close();
-            }
-        });
+            });
+            trigger.addEventListener('keydown', (event) => {
+                if (event.key === ' ' || event.key === 'Enter') {
+                    event.preventDefault();
+                    toggle();
+                } else if (event.key === 'Escape') {
+                    close();
+                }
+            });
+        }
         updateLabel();
         const api = {
             setOptions: applyOptions,
@@ -872,11 +889,15 @@
         document.addEventListener('click', (event) => {
             if (!openMultiSelectRoot) return;
             if (openMultiSelectRoot.contains(event.target)) return;
-            openMultiSelectInstance?.close();
+            if (openMultiSelectInstance && typeof openMultiSelectInstance.close === 'function') {
+                openMultiSelectInstance.close();
+            }
         });
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') {
-                openMultiSelectInstance?.close();
+                if (openMultiSelectInstance && typeof openMultiSelectInstance.close === 'function') {
+                    openMultiSelectInstance.close();
+                }
             }
         });
         listenersRegistered = true;
@@ -904,9 +925,9 @@
     }
 
     function escapeCsvCell(value) {
-        const text = String(value ?? '');
+        const text = String(value == null ? '' : value);
         if (/[";\n]/.test(text)) {
-            return `"${text.replace(/"/g, '""')}"`;
+            return '"' + text.replace(/"/g, '""') + '"';
         }
         return text;
     }

@@ -427,7 +427,8 @@
             const num = Number(value);
             if (!Number.isFinite(num)) return fallback;
             const int = Math.floor(num);
-            return int >= (min ?? 0) ? int : fallback;
+            const minValue = min != null ? min : 0;
+            return int >= minValue ? int : fallback;
         }
 
         function ensureNumber(value, fallback) {

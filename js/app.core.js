@@ -1,4 +1,14 @@
 (function () {
+    if (!window.escapeHtml || !window.escapeAttribute) {
+        window.escapeHtml = function (v) {
+            v = String(v == null ? '' : v);
+            return v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        };
+        window.escapeAttribute = function (v) {
+            v = String(v == null ? '' : v);
+            return v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/'/g, '&#39;');
+        };
+    }
     const STORAGE_KEY = 'vtb-portal-settings';
     const deepClone = typeof structuredClone === 'function' ? structuredClone : (value) => JSON.parse(JSON.stringify(value));
     const DEFAULTS = {
@@ -155,18 +165,18 @@
 
     function setupTabs() {
         const tabs = document.querySelectorAll('.tabs__tab');
-        tabs.forEach((tab) => {
-            tab.addEventListener('click', () => {
+        tabs.forEach(function (tab) {
+            tab.addEventListener('click', function () {
                 if (tab.classList.contains('tabs__tab--active')) return;
-                tabs.forEach((el) => {
+                tabs.forEach(function (el) {
                     el.classList.remove('tabs__tab--active');
                     el.setAttribute('aria-selected', 'false');
                 });
                 tab.classList.add('tabs__tab--active');
                 tab.setAttribute('aria-selected', 'true');
-                const target = tab.dataset.tab;
-                document.querySelectorAll('.tab-panel').forEach((panel) => {
-                    panel.classList.toggle('tab-panel--active', panel.id === `tab-${target}`);
+                var target = tab.dataset.tab;
+                document.querySelectorAll('.tab-panel').forEach(function (panel) {
+                    panel.classList.toggle('tab-panel--active', panel.id === 'tab-' + target);
                 });
             });
         });
@@ -177,9 +187,11 @@
         const info = document.getElementById('upload-info');
 
         fileInput.addEventListener('change', async (event) => {
-            const file = event.target.files?.[0];
+            const target = event.target || event.currentTarget;
+            const files = target && target.files ? target.files : null;
+            const file = files && files.length ? files[0] : null;
             if (!file) return;
-            info.textContent = 'Загружается…';
+            info.textContent = 'Загружается...';
             try {
                 const text = await readFileAsText(file);
                 const delimiter = detectDelimiter(text);
@@ -191,7 +203,7 @@
                 state.records = cleaned;
                 state.columns = columns;
                 state.fileName = file.name;
-                info.textContent = `${file.name} · ${cleaned.length.toLocaleString('ru-RU')} записей`;
+                info.textContent = file.name + ' - ' + cleaned.length.toLocaleString('ru-RU') + ' записей';
                 toggleButtons(true);
                 document.dispatchEvent(new CustomEvent('app:data-updated', {
                     detail: {
@@ -210,12 +222,14 @@
 
     function setupThemeToggle() {
         const button = document.getElementById('theme-toggle');
-        const initialTheme = state.settings.ui?.theme || DEFAULTS.ui.theme;
+        const initialTheme = state.settings && state.settings.ui && state.settings.ui.theme
+            ? state.settings.ui.theme
+            : DEFAULTS.ui.theme;
         applyTheme(initialTheme);
         if (!button) return;
         updateThemeButton(button, initialTheme);
         button.addEventListener('click', () => {
-            const current = state.settings.ui?.theme === 'dark' ? 'dark' : 'light';
+            const current = state.settings && state.settings.ui && state.settings.ui.theme === 'dark' ? 'dark' : 'light';
             const next = current === 'dark' ? 'light' : 'dark';
             state.settings.ui = state.settings.ui || {};
             state.settings.ui.theme = next;
@@ -326,9 +340,10 @@
     }
 
     function parseCsv(text, options) {
-        const delimiter = options?.delimiter ?? ',';
-        const skipEmptyLines = Boolean(options?.skipEmptyLines);
-        const header = Boolean(options?.header);
+        const opts = options || {};
+        const delimiter = opts.delimiter != null ? opts.delimiter : ',';
+        const skipEmptyLines = Boolean(opts.skipEmptyLines);
+        const header = Boolean(opts.header);
         const rows = [];
         const delimiterLength = delimiter.length;
         let field = '';
@@ -436,7 +451,7 @@
             const key = mapping[column];
             const rawValue = row[column];
             const cleaned = typeof rawValue === 'string' ? rawValue.trim() : rawValue;
-            normalized[key] = cleaned ?? '';
+            normalized[key] = cleaned != null ? cleaned : '';
         }
         normalized.title = normalized.title || '';
         normalized.description = normalized.description || '';
@@ -494,11 +509,13 @@
             const label = document.createElement('label');
             label.textContent = desc.label;
             let control;
-            const controlId = `${group}-${desc.key}`;
+            const controlId = group + '-' + desc.key;
             label.htmlFor = controlId;
             if (desc.type === 'textarea') {
                 control = document.createElement('textarea');
-                control.value = getSettingValue(group, desc.key) ?? desc.defaultValue ?? '';
+                var storedText = getSettingValue(group, desc.key);
+                var fallbackText = desc.defaultValue != null ? desc.defaultValue : '';
+                control.value = storedText != null ? storedText : fallbackText;
             } else {
                 control = document.createElement('input');
                 control.type = desc.type || 'text';
@@ -506,7 +523,9 @@
                     const value = getSettingValue(group, desc.key);
                     control.checked = value !== undefined ? Boolean(value) : Boolean(desc.defaultValue);
                 } else {
-                    control.value = getSettingValue(group, desc.key) ?? desc.defaultValue ?? '';
+                    var storedValue = getSettingValue(group, desc.key);
+                    var fallbackValue = desc.defaultValue != null ? desc.defaultValue : '';
+                    control.value = storedValue != null ? storedValue : fallbackValue;
                 }
                 if (desc.step) control.step = String(desc.step);
                 if (desc.min !== undefined) control.min = String(desc.min);
@@ -534,7 +553,10 @@
     }
 
     function getSettingValue(group, key) {
-        return state.settings?.[group]?.[key];
+        if (!state.settings) return undefined;
+        const groupData = state.settings[group];
+        if (!groupData) return undefined;
+        return groupData[key];
     }
 
     window.AppCore = {

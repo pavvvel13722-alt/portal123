@@ -150,7 +150,7 @@
         return list.map((record, idx) => {
             const authorText = (record.author || '').toLowerCase();
             const descriptionText = (record.description || '').toLowerCase();
-            const tokens = tokenize(`${authorText} ${descriptionText}`);
+            const tokens = tokenize(authorText + ' ' + descriptionText);
             const statusValue = (record.status || '').toLowerCase();
             const priorityValue = (record.priority || '').toLowerCase();
             return {
@@ -311,22 +311,22 @@
         }
 
         elements.exportSearch.disabled = false;
-        elements.resultContainer.innerHTML = `
-            <div class="table-scroll">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Описание</th>
-                            <th>Создано</th>
-                            <th>Статус</th>
-                            <th>Приоритет</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
-            </div>
-        `;
+        var tableHtml = '';
+        tableHtml += '<div class="table-scroll">';
+        tableHtml += '<table class="table">';
+        tableHtml += '<thead>';
+        tableHtml += '<tr>';
+        tableHtml += '<th>ID</th>';
+        tableHtml += '<th>Описание</th>';
+        tableHtml += '<th>Создано</th>';
+        tableHtml += '<th>Статус</th>';
+        tableHtml += '<th>Приоритет</th>';
+        tableHtml += '</tr>';
+        tableHtml += '</thead>';
+        tableHtml += '<tbody></tbody>';
+        tableHtml += '</table>';
+        tableHtml += '</div>';
+        elements.resultContainer.innerHTML = tableHtml;
         scrollHost = elements.resultContainer.querySelector('.table-scroll');
         appendRows();
         if (scrollHost) {
@@ -343,13 +343,16 @@
         slice.forEach((row) => {
             const tr = document.createElement('tr');
             const descriptionFull = escapeAttribute(row.description || '');
-            tr.innerHTML = `
-                <td><a href="https://sfera.vtb.ru/sd/support?open=${encodeURIComponent(row.id)}" target="_blank" rel="noopener">${escapeHtml(row.id || '')}</a></td>
-                <td><span class="description-cell" title="${descriptionFull}">${row.descriptionHighlighted || escapeHtml(row.description || '')}</span></td>
-                <td>${escapeHtml(row.createdAt || '')}</td>
-                <td>${escapeHtml(row.status || '')}</td>
-                <td>${escapeHtml(row.priority || '')}</td>
-            `;
+            const rowId = row.id || '';
+            const linkUrl = 'https://sfera.vtb.ru/sd/support?open=' + encodeURIComponent(rowId);
+            const highlightedDescription = row.descriptionHighlighted || escapeHtml(row.description || '');
+            let rowHtml = '';
+            rowHtml += '<td><a href="' + linkUrl + '" target="_blank" rel="noopener">' + escapeHtml(rowId) + '</a></td>';
+            rowHtml += '<td><span class="description-cell" title="' + descriptionFull + '">' + highlightedDescription + '</span></td>';
+            rowHtml += '<td>' + escapeHtml(row.createdAt || '') + '</td>';
+            rowHtml += '<td>' + escapeHtml(row.status || '') + '</td>';
+            rowHtml += '<td>' + escapeHtml(row.priority || '') + '</td>';
+            tr.innerHTML = rowHtml;
             fragment.appendChild(tr);
         });
         tbody.appendChild(fragment);
@@ -376,9 +379,16 @@
             ]);
         });
         const csv = rows
-            .map((line) => line.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(';'))
+            .map(function (line) {
+                return line
+                    .map(function (cell) {
+                        const value = String(cell == null ? '' : cell).replace(/"/g, '""');
+                        return '"' + value + '"';
+                    })
+                    .join(';');
+            })
             .join('\n');
-        const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+        const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
         link.download = 'search-results.csv';
@@ -417,8 +427,8 @@
         let highlighted = escapeHtml(text);
         keywords.forEach((keyword) => {
             if (!keyword) return;
-            const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            highlighted = highlighted.replace(new RegExp(`(${escaped})`, 'gi'), '<mark class="highlight">$1</mark>');
+            const escaped = keyword.replace(/[.*+?^$\{\}()|[\]\\]/g, '\\$&');
+            highlighted = highlighted.replace(new RegExp('(' + escaped + ')', 'gi'), '<mark class="highlight">$1</mark>');
         });
         return highlighted;
     }
@@ -459,19 +469,41 @@
             li.className = 'category-item';
             if (category.id === activeCategoryId) li.classList.add('category-item--active');
             li.dataset.id = category.id;
-            li.innerHTML = `
-                <div class="category-item__header">
-                    <span class="category-item__name">${escapeHtml(category.name)}</span>
-                    <div class="category-item__actions">
-                        <span class="badge">Порог ≥ ${escapeHtml(String(category.threshold))}</span>
-                        <button class="button button--ghost" data-action="edit" type="button" title="Редактировать">✏️</button>
-                        <button class="button button--ghost" data-action="delete" type="button" title="Удалить">🗑️</button>
-                    </div>
-                </div>
-                <div class="category-item__keywords">${category.keywords
-                    .map((keyword) => `<span class="chip">${escapeHtml(keyword)}</span>`)
-                    .join('')}</div>
-            `;
+            const header = document.createElement('div');
+            header.className = 'category-item__header';
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'category-item__name';
+            nameSpan.textContent = category.name;
+            header.appendChild(nameSpan);
+            const actions = document.createElement('div');
+            actions.className = 'category-item__actions';
+            const badge = document.createElement('span');
+            badge.className = 'badge';
+            badge.textContent = 'Порог >= ' + String(category.threshold);
+            actions.appendChild(badge);
+            const editBtn = document.createElement('button');
+            editBtn.className = 'button button--ghost';
+            editBtn.dataset.action = 'edit';
+            editBtn.type = 'button';
+            editBtn.title = 'Редактировать';
+            editBtn.textContent = '✏️';
+            actions.appendChild(editBtn);
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'button button--ghost';
+            deleteBtn.dataset.action = 'delete';
+            deleteBtn.type = 'button';
+            deleteBtn.title = 'Удалить';
+            deleteBtn.textContent = '🗑️';
+            actions.appendChild(deleteBtn);
+            header.appendChild(actions);
+            li.appendChild(header);
+            const keywordsWrap = document.createElement('div');
+            keywordsWrap.className = 'category-item__keywords';
+            const chipsHtml = category.keywords
+                .map(function (keyword) { return '<span class="chip">' + escapeHtml(keyword) + '</span>'; })
+                .join('');
+            keywordsWrap.innerHTML = chipsHtml;
+            li.appendChild(keywordsWrap);
             fragment.appendChild(li);
         });
         container.innerHTML = '';
@@ -499,12 +531,15 @@
             chipContainer.innerHTML = '<span class="chip">Нет ключевых слов</span>';
             return;
         }
-        chipContainer.innerHTML = chips.map((chip) => `<span class="chip">${escapeHtml(chip)}</span>`).join('');
+        const chipsHtml = chips
+            .map(function (chip) { return '<span class="chip">' + escapeHtml(chip) + '</span>'; })
+            .join('');
+        chipContainer.innerHTML = chipsHtml;
     }
 
     function updateResultCounter(count) {
         if (!elements.resultCount) return;
-        elements.resultCount.textContent = `Найдено: ${count}`;
+        elements.resultCount.textContent = 'Найдено: ' + count;
     }
 
     function populateFilterOptions(list) {
@@ -522,11 +557,11 @@
 
     function openCategoryModal(category) {
         const isEdit = Boolean(category);
-        modalState = { id: category?.id || null };
+        modalState = { id: category && category.id ? category.id : null };
         elements.modalTitle.textContent = isEdit ? 'Редактирование категории' : 'Новая категория';
-        elements.modalName.value = category?.name || '';
-        elements.modalKeywords.value = category ? category.keywords.join('\n') : '';
-        elements.modalThreshold.value = category?.threshold != null ? category.threshold : 5;
+        elements.modalName.value = category && category.name ? category.name : '';
+        elements.modalKeywords.value = category && Array.isArray(category.keywords) ? category.keywords.join('\n') : '';
+        elements.modalThreshold.value = category && category.threshold != null ? category.threshold : 5;
         elements.modal.setAttribute('aria-hidden', 'false');
     }
 
@@ -577,11 +612,13 @@
     }
 
     function generateCategoryId() {
-        return `cat-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+        return 'cat-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
     }
 
     function importCategories(event) {
-        const file = event.target.files?.[0];
+        const target = event.target || event.currentTarget;
+        const files = target && target.files ? target.files : null;
+        const file = files && files.length ? files[0] : null;
         if (!file) return;
         const reader = new FileReader();
         reader.onload = () => {
@@ -642,7 +679,7 @@
     }
 
     function createMultiSelect(id, placeholder, onChange) {
-        const root = document.querySelector(`[data-multi="${id}"]`);
+        const root = document.querySelector('[data-multi="' + id + '"]');
         const hiddenInput = document.getElementById(id);
         if (!root || !hiddenInput) {
             return {
@@ -673,7 +710,7 @@
             const selectedLabels = Array.from(state.selected.values());
             labelNode.textContent = selectedLabels.length <= 2
                 ? selectedLabels.join(', ')
-                : `Выбрано: ${selectedLabels.length}`;
+                : 'Выбрано: ' + selectedLabels.length;
         }
 
         function syncHidden() {
@@ -683,7 +720,9 @@
         function close() {
             root.classList.remove('multi-select--open');
             dropdown.hidden = true;
-            trigger?.setAttribute('aria-expanded', 'false');
+            if (trigger) {
+                trigger.setAttribute('aria-expanded', 'false');
+            }
             if (openMultiSelectInstance === api) {
                 openMultiSelectInstance = null;
                 openMultiSelectRoot = null;
@@ -697,7 +736,9 @@
             }
             root.classList.add('multi-select--open');
             dropdown.hidden = false;
-            trigger?.setAttribute('aria-expanded', 'true');
+            if (trigger) {
+                trigger.setAttribute('aria-expanded', 'true');
+            }
             openMultiSelectInstance = api;
             openMultiSelectRoot = root;
         }
@@ -747,13 +788,13 @@
             state.options.forEach((option, index) => {
                 const item = document.createElement('li');
                 item.className = 'multi-select__item';
-                const checkboxId = `${id}-${index}`;
-                item.innerHTML = `
-                    <label for="${escapeAttribute(checkboxId)}">
-                        <input type="checkbox" id="${escapeAttribute(checkboxId)}" value="${escapeAttribute(option.normalized)}">
-                        <span>${escapeHtml(option.label)}</span>
-                    </label>
-                `;
+                const checkboxId = id + '-' + index;
+                let itemHtml = '';
+                itemHtml += '<label for="' + escapeAttribute(checkboxId) + '">';
+                itemHtml += '<input type="checkbox" id="' + escapeAttribute(checkboxId) + '" value="' + escapeAttribute(option.normalized) + '">';
+                itemHtml += '<span>' + escapeHtml(option.label) + '</span>';
+                itemHtml += '</label>';
+                item.innerHTML = itemHtml;
                 list.appendChild(item);
             });
             dropdown.appendChild(list);
@@ -780,20 +821,22 @@
             event.stopPropagation();
         });
 
-        trigger?.addEventListener('click', (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            toggle();
-        });
-
-        trigger?.addEventListener('keydown', (event) => {
-            if (event.key === ' ' || event.key === 'Enter') {
+        if (trigger) {
+            trigger.addEventListener('click', (event) => {
                 event.preventDefault();
+                event.stopPropagation();
                 toggle();
-            } else if (event.key === 'Escape') {
-                close();
-            }
-        });
+            });
+
+            trigger.addEventListener('keydown', (event) => {
+                if (event.key === ' ' || event.key === 'Enter') {
+                    event.preventDefault();
+                    toggle();
+                } else if (event.key === 'Escape') {
+                    close();
+                }
+            });
+        }
 
         updateLabel();
 

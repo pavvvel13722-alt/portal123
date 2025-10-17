@@ -475,13 +475,13 @@
                         const t = Math.round(pair.t3 * 100);
                         const j = Math.round(pair.j3 * 100);
                         const threshold = Math.round(pair.threshold * 100);
-                        return 'T3 ' + t + '% · J3 ' + j + '% · Порог ' + threshold + '%';
+                        return 'T3 ' + t + '% - J3 ' + j + '% - Порог ' + threshold + '%';
                     }
         
                     function buildSnippet(text, tokens) {
                         if (!text) return '<span class="record__meta">Описание отсутствует</span>';
                         const trimmed = collapseWhitespace(String(text || ''));
-                        const short = trimmed.length > 280 ? trimmed.slice(0, 280) + '…' : trimmed;
+                        const short = trimmed.length > 280 ? trimmed.slice(0, 280) + '...' : trimmed;
                         const highlightTokens = Array.from(tokens || [])
                             .map((token) => {
                                 if (!token) return '';

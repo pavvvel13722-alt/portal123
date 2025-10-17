@@ -16,9 +16,9 @@
                 { key: 'smartThreshold', label: 'Умный порог по длине', type: 'checkbox', defaultValue: true },
                 { key: 'thresholdShort', label: 'Порог для коротких описаний (<8 токенов)', type: 'number', step: 0.01, min: 0, max: 1 },
                 { key: 'thresholdMedium', label: 'Порог для средних описаний (8-19 токенов)', type: 'number', step: 0.01, min: 0, max: 1 },
-                { key: 'thresholdLong', label: 'Порог для длинных описаний (≥20 токенов)', type: 'number', step: 0.01, min: 0, max: 1 },
+                { key: 'thresholdLong', label: 'Порог для длинных описаний (>=20 токенов)', type: 'number', step: 0.01, min: 0, max: 1 },
                 { key: 'baseThreshold', label: 'Порог без умной логики', type: 'number', step: 0.01, min: 0, max: 1 },
-                { key: 'timeGuardEnabled', label: 'Учитывать интервал ± дней', type: 'checkbox', defaultValue: true },
+                { key: 'timeGuardEnabled', label: 'Учитывать интервал +/- дней', type: 'checkbox', defaultValue: true },
                 { key: 'timeGuardDays', label: 'Интервал по дате (дни)', type: 'number', step: 1, min: 0, max: 60 },
                 { key: 'stopPhrases', label: 'Стоп-фразы в описании (по одной в строке)', type: 'textarea' }
             ],
@@ -45,7 +45,7 @@
     document.getElementById('btn-run-duplicates').addEventListener('click', () => {
         if (!currentRecords.length) return;
         const settings = AppCore.getSettings().duplicates;
-        document.getElementById('btn-run-duplicates').textContent = '⏳ Обработка…';
+        document.getElementById('btn-run-duplicates').textContent = '⏳ Обработка...';
         document.getElementById('btn-run-duplicates').disabled = true;
         const payload = {
             records: prepareWorkerPayload(currentRecords),
@@ -86,8 +86,17 @@
                 ]);
             });
         });
-        const csv = rows.map((row) => row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
-        const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+        const csv = rows
+            .map(function (row) {
+                return row
+                    .map(function (cell) {
+                        const value = String(cell == null ? '' : cell).replace(/"/g, '""');
+                        return '"' + value + '"';
+                    })
+                    .join(';');
+            })
+            .join('\n');
+        const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
         link.download = 'duplicates.csv';
@@ -105,7 +114,8 @@
             pendingJob = null;
         }
         if (type === 'analysis-error') {
-            console.error('Duplicate analysis failed', payload?.error);
+            const payloadError = payload && payload.error ? payload.error : payload;
+            console.error('Duplicate analysis failed', payloadError);
             alert('Не удалось выполнить анализ дублей. Подробности в консоли.');
             resetRunButton();
             runDuplicatesFallback();
@@ -113,7 +123,9 @@
     }
 
     function handleWorkerError(event) {
-        console.error('Duplicate worker runtime error', event?.message, event?.error || '');
+        const runtimeMessage = event && event.message ? event.message : '';
+        const runtimeError = event && event.error ? event.error : '';
+        console.error('Duplicate worker runtime error', runtimeMessage, runtimeError);
         alert('Произошла ошибка Web Worker. Проверьте консоль.');
         resetRunButton();
         teardownWorker();
@@ -219,70 +231,127 @@
             header.className = 'cluster__header';
             const title = document.createElement('h3');
             title.className = 'cluster__title';
-            title.textContent = `${cluster.author || 'Неизвестная группа'} — ${cluster.members.length} обращений`;
+            const clusterAuthor = cluster.author ? cluster.author : 'Неизвестная группа';
+            title.textContent = clusterAuthor + ' - ' + cluster.members.length + ' обращений';
             const stats = document.createElement('div');
             stats.className = 'cluster__stats';
             const statsParts = [];
-            const thresholds = meta?.thresholds || {};
-            if (meta?.smartThreshold) {
-                const short = thresholds.short != null ? (thresholds.short * 100).toFixed(0) : '—';
-                const medium = thresholds.medium != null ? (thresholds.medium * 100).toFixed(0) : '—';
-                const long = thresholds.long != null ? (thresholds.long * 100).toFixed(0) : '—';
-                statsParts.push(`Умный порог: <8 → ${short}%, 8-19 → ${medium}%, ≥20 → ${long}%`);
+            const thresholds = meta && meta.thresholds ? meta.thresholds : {};
+            if (meta && meta.smartThreshold) {
+                const short = thresholds.short != null ? (thresholds.short * 100).toFixed(0) : '-';
+                const medium = thresholds.medium != null ? (thresholds.medium * 100).toFixed(0) : '-';
+                const long = thresholds.long != null ? (thresholds.long * 100).toFixed(0) : '-';
+                statsParts.push('Умный порог: <8 -> ' + short + '%, 8-19 -> ' + medium + '%, >=20 -> ' + long + '%');
             } else if (thresholds.base != null) {
-                statsParts.push(`Порог: ${(thresholds.base * 100).toFixed(0)}%`);
+                statsParts.push('Порог: ' + (thresholds.base * 100).toFixed(0) + '%');
             }
-            if (meta?.timeGuard?.enabled) {
-                statsParts.push(`Интервал ±${meta.timeGuard.days} д.`);
+            if (meta && meta.timeGuard && meta.timeGuard.enabled) {
+                statsParts.push('Интервал +/-' + meta.timeGuard.days + ' д.');
             }
             if (!statsParts.length) {
                 statsParts.push('Параметры порога недоступны');
             }
-            stats.textContent = statsParts.join(' · ');
+            stats.textContent = statsParts.join(' | ');
             header.appendChild(title);
             header.appendChild(stats);
             wrapper.appendChild(header);
 
-            const list = document.createElement('div');
-            list.className = 'record-list';
-            const masterId = cluster.primary?.id || '';
-            cluster.members.forEach((record) => {
-                const row = document.createElement('div');
-                row.className = 'record';
-                if (record.isPrimary) row.classList.add('record--primary');
-                else row.classList.add('record--duplicate');
+        const list = document.createElement('div');
+        list.className = 'record-list';
+        const masterId = cluster.primary && cluster.primary.id ? cluster.primary.id : '';
+        cluster.members.forEach(function (record) {
+            const row = document.createElement('div');
+            row.className = 'record';
+            if (record.isPrimary) row.classList.add('record--primary');
+            else row.classList.add('record--duplicate');
 
-                row.innerHTML = `
-                    <div class="record__field record__id">
-                        <div class="record__title">
-                            <span class="record__badge">${record.isPrimary ? '🟩' : '🟥'}</span>
-                            <a href="https://sfera.vtb.ru/sd/support?open=${record.id}" target="_blank" rel="noopener noreferrer">${record.id || '—'}</a>
-                        </div>
-                        <div class="record__snippet">${record.snippet || '<span class="record__meta">Нет описания</span>'}</div>
-                    </div>
-                    <div class="record__field">
-                        <span>${record.author || '—'}</span>
-                        <span class="record__meta">${record.isPrimary ? 'Основное обращение' : 'Дубль основного'}</span>
-                    </div>
-                    <div class="record__field">
-                        <span>${record.priority || '—'}</span>
-                        <span class="record__meta">${record.sla ? `SLA: ${record.sla}` : ''}</span>
-                    </div>
-                    <div class="record__field">
-                        <span>${record.createdAt || '—'}</span>
-                        <span class="record__meta">${record.status || ''}</span>
-                    </div>
-                    <div class="record__field">
-                        <span>${record.similarity ? record.similarity : record.isPrimary ? '—' : '0%'}</span>
-                        <span class="record__meta">${record.similarityDetail || 'Порог: —'}</span>
-                    </div>
-                    <div class="record__actions">
-                        <button data-action="open" data-id="${record.id}">🔗 Открыть</button>
-                        <button data-action="copy" data-id="${record.id}" data-primary="${masterId}" ${record.isPrimary ? 'disabled' : ''}>📋 Текст закрытия</button>
-                    </div>
-                `;
-                list.appendChild(row);
-            });
+            const fieldId = document.createElement('div');
+            fieldId.className = 'record__field record__id';
+            const titleWrap = document.createElement('div');
+            titleWrap.className = 'record__title';
+            const badge = document.createElement('span');
+            badge.className = 'record__badge';
+            badge.textContent = record.isPrimary ? '🟩' : '🟥';
+            titleWrap.appendChild(badge);
+            const link = document.createElement('a');
+            const recordId = record.id ? record.id : '';
+            const linkUrl = 'https://sfera.vtb.ru/sd/support?open=' + encodeURIComponent(recordId);
+            link.href = linkUrl;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.textContent = recordId || '-';
+            titleWrap.appendChild(link);
+            fieldId.appendChild(titleWrap);
+            const snippet = document.createElement('div');
+            snippet.className = 'record__snippet';
+            snippet.innerHTML = record.snippet ? record.snippet : '<span class="record__meta">Нет описания</span>';
+            fieldId.appendChild(snippet);
+            row.appendChild(fieldId);
+
+            const fieldAuthor = document.createElement('div');
+            fieldAuthor.className = 'record__field';
+            const authorSpan = document.createElement('span');
+            authorSpan.textContent = record.author || '-';
+            fieldAuthor.appendChild(authorSpan);
+            const role = document.createElement('span');
+            role.className = 'record__meta';
+            role.textContent = record.isPrimary ? 'Основное обращение' : 'Дубль основного';
+            fieldAuthor.appendChild(role);
+            row.appendChild(fieldAuthor);
+
+            const fieldPriority = document.createElement('div');
+            fieldPriority.className = 'record__field';
+            const prioritySpan = document.createElement('span');
+            prioritySpan.textContent = record.priority || '-';
+            fieldPriority.appendChild(prioritySpan);
+            const slaSpan = document.createElement('span');
+            slaSpan.className = 'record__meta';
+            slaSpan.textContent = record.sla ? 'SLA: ' + record.sla : '';
+            fieldPriority.appendChild(slaSpan);
+            row.appendChild(fieldPriority);
+
+            const fieldDate = document.createElement('div');
+            fieldDate.className = 'record__field';
+            const dateSpan = document.createElement('span');
+            dateSpan.textContent = record.createdAt || '-';
+            fieldDate.appendChild(dateSpan);
+            const statusSpan = document.createElement('span');
+            statusSpan.className = 'record__meta';
+            statusSpan.textContent = record.status || '';
+            fieldDate.appendChild(statusSpan);
+            row.appendChild(fieldDate);
+
+            const fieldSimilarity = document.createElement('div');
+            fieldSimilarity.className = 'record__field';
+            const similaritySpan = document.createElement('span');
+            if (record.similarity) similaritySpan.textContent = record.similarity;
+            else if (record.isPrimary) similaritySpan.textContent = '-';
+            else similaritySpan.textContent = '0%';
+            fieldSimilarity.appendChild(similaritySpan);
+            const similarityMeta = document.createElement('span');
+            similarityMeta.className = 'record__meta';
+            similarityMeta.textContent = record.similarityDetail || 'Порог: -';
+            fieldSimilarity.appendChild(similarityMeta);
+            row.appendChild(fieldSimilarity);
+
+            const actions = document.createElement('div');
+            actions.className = 'record__actions';
+            const openButton = document.createElement('button');
+            openButton.dataset.action = 'open';
+            openButton.dataset.id = recordId;
+            openButton.textContent = '🔗 Открыть';
+            actions.appendChild(openButton);
+            const copyButton = document.createElement('button');
+            copyButton.dataset.action = 'copy';
+            copyButton.dataset.id = recordId;
+            copyButton.dataset.primary = masterId;
+            copyButton.textContent = '📋 Текст закрытия';
+            if (record.isPrimary) copyButton.disabled = true;
+            actions.appendChild(copyButton);
+            row.appendChild(actions);
+
+            list.appendChild(row);
+        });
             wrapper.appendChild(list);
             fragment.appendChild(wrapper);
         });
@@ -299,17 +368,18 @@
         const id = button.dataset.id;
         if (!id) return;
         if (action === 'open') {
-            window.open(`https://sfera.vtb.ru/sd/support?open=${id}`, '_blank', 'noopener');
+            const url = 'https://sfera.vtb.ru/sd/support?open=' + encodeURIComponent(id);
+            window.open(url, '_blank', 'noopener');
         }
         if (action === 'copy') {
             const primaryId = button.dataset.primary || id;
-            const text = `Ошибочное обращение\nДубль обращения ${primaryId}. Работы продолжаются там.`;
-            navigator.clipboard.writeText(text).then(() => {
+            const text = 'Ошибочное обращение\nДубль обращения ' + primaryId + '. Работы продолжаются там.';
+            navigator.clipboard.writeText(text).then(function () {
                 button.textContent = '✅ Скопировано';
-                setTimeout(() => {
+                setTimeout(function () {
                     button.textContent = '📋 Текст закрытия';
                 }, 2000);
-            }).catch(() => {
+            }).catch(function () {
                 alert('Не удалось скопировать текст. Скопируйте вручную:\n' + text);
             });
         }
@@ -363,25 +433,25 @@
         if (!factory) {
             throw new Error('DuplicateEngineFactory недоступен');
         }
-        const factorySource = `(${factory.toString()})`;
-        return `
-            const engineFactory = ${factorySource};
-            const engine = engineFactory();
-            self.onmessage = (event) => {
-                const data = event.data || {};
-                if (data.type === 'analyze') {
-                    const payload = data.payload || {};
-                    const records = Array.isArray(payload.records) ? payload.records : [];
-                    const settings = payload.settings || {};
-                    try {
-                        const result = engine.analyze(records, settings);
-                        self.postMessage({ type: 'analysis-complete', payload: result });
-                    } catch (error) {
-                        self.postMessage({ type: 'analysis-error', payload: { error: engine.serializeError(error) } });
-                    }
-                }
-            };
-        `;
+        const factorySource = '(' + factory.toString() + ')';
+        const lines = [];
+        lines.push('const engineFactory = ' + factorySource + ';');
+        lines.push('const engine = engineFactory();');
+        lines.push('self.onmessage = function (event) {');
+        lines.push('    const data = event.data || {};');
+        lines.push('    if (data.type === "analyze") {');
+        lines.push('        const payload = data.payload || {};');
+        lines.push('        const records = Array.isArray(payload.records) ? payload.records : [];');
+        lines.push('        const settings = payload.settings || {};');
+        lines.push('        try {');
+        lines.push('            const result = engine.analyze(records, settings);');
+        lines.push('            self.postMessage({ type: "analysis-complete", payload: result });');
+        lines.push('        } catch (error) {');
+        lines.push('            self.postMessage({ type: "analysis-error", payload: { error: engine.serializeError(error) } });');
+        lines.push('        }');
+        lines.push('    }');
+        lines.push('};');
+        return lines.join('\n');
     }
 
     function createWorker() {

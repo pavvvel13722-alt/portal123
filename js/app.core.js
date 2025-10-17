@@ -63,6 +63,11 @@
         }
     };
 
+    const Shared = window.AppCoreShared;
+    if (!Shared) {
+        throw new Error('AppCoreShared is not available');
+    }
+
     const state = {
         records: [],
         columns: [],
@@ -203,12 +208,12 @@
             info.textContent = 'Загружается...';
             try {
                 const text = await readFileAsText(file);
-                const delimiter = detectDelimiter(text);
-                const parsed = parseCsv(text, { delimiter, header: true, skipEmptyLines: true });
+                const delimiter = Shared.detectDelimiter(text);
+                const parsed = Shared.parseCsv(text, { delimiter: delimiter, header: true, skipEmptyLines: true });
                 const columns = parsed.meta.fields || [];
                 const cleaned = (parsed.data || [])
                     .filter(Boolean)
-                    .map((row) => normalizeRow(row, columns));
+                    .map(function (row) { return Shared.normalizeRow(row, columns); });
                 state.records = cleaned;
                 state.columns = columns;
                 state.fileName = file.name;
@@ -290,12 +295,12 @@
             const strictUtf8 = new TextDecoder('utf-8', { fatal: true });
             const text = strictUtf8.decode(view);
             utf8WasValid = true;
-            candidates.push({ encoding: 'utf-8', text, score: scoreDecodedText(text) + 500 });
+            candidates.push({ encoding: 'utf-8', text, score: Shared.scoreDecodedText(text) + 500 });
         } catch (err) {
             try {
                 const relaxedUtf8 = new TextDecoder('utf-8');
                 const text = relaxedUtf8.decode(view);
-                candidates.push({ encoding: 'utf-8', text, score: scoreDecodedText(text) });
+                candidates.push({ encoding: 'utf-8', text, score: Shared.scoreDecodedText(text) });
             } catch (errorUtf8) {
                 console.warn('Не удалось декодировать как UTF-8', errorUtf8);
             }
@@ -304,7 +309,7 @@
             const winDecoder = new TextDecoder('windows-1251');
             const winText = winDecoder.decode(view);
             const bonus = utf8WasValid ? -500 : 0;
-            candidates.push({ encoding: 'windows-1251', text: winText, score: scoreDecodedText(winText) + bonus });
+            candidates.push({ encoding: 'windows-1251', text: winText, score: Shared.scoreDecodedText(winText) + bonus });
         } catch (err) {
             console.warn('Не удалось декодировать как Windows-1251', err);
         }
@@ -316,340 +321,6 @@
             return a.score > b.score ? -1 : 1;
         });
         return candidates[0].text;
-    }
-
-    function scoreDecodedText(text) {
-        if (!text) return -Infinity;
-        let cyrCount = 0;
-        let replaceCount = 0;
-        let highLatinCount = 0;
-        for (let i = 0; i < text.length; i += 1) {
-            const code = text.charCodeAt(i);
-            if ((code >= 0x0410 && code <= 0x044f) || code === 0x0401 || code === 0x0451) {
-                cyrCount += 1;
-                continue;
-            }
-            if (code === 0xfffd) {
-                replaceCount += 1;
-                continue;
-            }
-            if (code >= 0x00c0 && code <= 0x00ff) {
-                highLatinCount += 1;
-            }
-        }
-        return cyrCount * 2 - replaceCount * 5 - highLatinCount;
-    }
-
-    function detectDelimiter(text) {
-        const candidates = [';', ',', '\t', '|'];
-        const sample = extractSample(text, 250);
-        let best = candidates[0];
-        let bestScore = -Infinity;
-
-        for (const delimiter of candidates) {
-            const parsed = parseCsv(sample, { delimiter, header: false, skipEmptyLines: true });
-            if (!parsed.data || !parsed.data.length) continue;
-            const lengths = parsed.data
-                .map((row) => (Array.isArray(row) ? row.length : Object.keys(row || {}).length))
-                .filter((length) => length > 1);
-            if (!lengths.length) continue;
-            const stats = getLengthStats(lengths);
-            const score = stats.consistency * 1000 + stats.modeLength;
-            if (score > bestScore) {
-                bestScore = score;
-                best = delimiter;
-            }
-        }
-
-        return best;
-    }
-
-    function extractSample(text, maxRows) {
-        let inQuotes = false;
-        let rows = 0;
-        for (let i = 0; i < text.length; i += 1) {
-            const char = text[i];
-            if (char === '"') {
-                if (inQuotes && text[i + 1] === '"') {
-                    i += 1;
-                } else {
-                    inQuotes = !inQuotes;
-                }
-            } else if (!inQuotes && (char === '\n' || char === '\r')) {
-                rows += 1;
-                if (rows >= maxRows) {
-                    return text.slice(0, i);
-                }
-                if (char === '\r' && text[i + 1] === '\n') {
-                    i += 1;
-                }
-            }
-        }
-        return text;
-    }
-
-    function getLengthStats(lengths) {
-        const counts = new Map();
-        lengths.forEach((length) => {
-            counts.set(length, (counts.get(length) || 0) + 1);
-        });
-        let modeLength = 0;
-        let modeCount = 0;
-        counts.forEach((count, length) => {
-            if (count > modeCount) {
-                modeLength = length;
-                modeCount = count;
-            }
-        });
-        const consistency = modeCount / lengths.length;
-        return { modeLength, consistency };
-    }
-
-    function parseCsv(text, options) {
-        const opts = options || {};
-        const delimiter = opts.delimiter != null ? opts.delimiter : ',';
-        const skipEmptyLines = Boolean(opts.skipEmptyLines);
-        const header = Boolean(opts.header);
-        const rows = [];
-        const delimiterLength = delimiter.length;
-        let field = '';
-        let row = [];
-        let inQuotes = false;
-
-        const pushField = () => {
-            row.push(field);
-            field = '';
-        };
-
-        const pushRow = () => {
-            const isEmpty = row.every((value) => {
-                const str = value == null ? '' : String(value);
-                return str.trim().length === 0;
-            });
-            if (!(skipEmptyLines && isEmpty)) {
-                rows.push(row.slice());
-            }
-            row = [];
-        };
-
-        for (let i = 0; i < text.length; i += 1) {
-            const char = text[i];
-            if (char === '"') {
-                if (inQuotes && text[i + 1] === '"') {
-                    field += '"';
-                    i += 1;
-                } else {
-                    inQuotes = !inQuotes;
-                }
-                continue;
-            }
-
-            if (!inQuotes) {
-                if (
-                    (delimiterLength === 1 && char === delimiter) ||
-                    (delimiterLength > 1 && text.slice(i, i + delimiterLength) === delimiter)
-                ) {
-                    pushField();
-                    if (delimiterLength > 1) {
-                        i += delimiterLength - 1;
-                    }
-                    continue;
-                }
-
-                if (char === '\n' || char === '\r') {
-                    pushField();
-                    pushRow();
-                    if (char === '\r' && text[i + 1] === '\n') {
-                        i += 1;
-                    }
-                    continue;
-                }
-            }
-
-            field += char;
-        }
-
-        pushField();
-        pushRow();
-
-        if (!rows.length) {
-            return { data: [], meta: { fields: header ? [] : null } };
-        }
-
-        if (!header) {
-            return { data: rows, meta: { fields: null } };
-        }
-
-        const headers = rows[0].map((item) => (item == null ? '' : String(item).trim()));
-        const dataRows = rows.slice(1).map((columns) => {
-            const entry = {};
-            headers.forEach((key, index) => {
-                const value = columns[index] != null ? columns[index] : '';
-                entry[key] = typeof value === 'string' ? value.trim() : value;
-            });
-            return entry;
-        });
-
-        return { data: dataRows, meta: { fields: headers } };
-    }
-
-    const HEADER_KEY_MAP = {
-        'id': 'id',
-        'номер обращения': 'id',
-        'автор': 'author',
-        'автор обращения': 'author',
-        'автор заявки': 'author',
-        'инициатор': 'author',
-        'название': 'title',
-        'тема': 'title',
-        'описание': 'description',
-        'статус': 'status',
-        'приоритет': 'priority',
-        'создано': 'createdAt',
-        'дата создания': 'createdAt',
-        'нормативный срок': 'dueAt',
-        'дедлайн': 'dueAt',
-        'sla индикатор': 'sla',
-        'slm индикатор': 'sla',
-        'sla': 'sla',
-        'slm': 'sla',
-        'контактное лицо': 'contact',
-        'контакт': 'contact',
-        'пользователь': 'requester',
-        'инициатор обращения': 'requester',
-        'заявитель': 'requester',
-        'сервис': 'service',
-        'теги': 'tags',
-        'тэги': 'tags'
-    };
-
-    function mapCanonicalHeader(canonical) {
-        if (!canonical) return '';
-        if (HEADER_KEY_MAP[canonical]) {
-            return HEADER_KEY_MAP[canonical];
-        }
-        if (canonical.indexOf('автор') !== -1 || canonical.indexOf('инициатор') !== -1) {
-            return 'author';
-        }
-        if (canonical.indexOf('название') !== -1 || canonical.indexOf('тема') !== -1 || canonical.indexOf('шаблон') !== -1) {
-            return 'title';
-        }
-        if (canonical.indexOf('описание') !== -1 || canonical.indexOf('комментарий') !== -1) {
-            return 'description';
-        }
-        if (canonical.indexOf('статус') !== -1) {
-            return 'status';
-        }
-        if (canonical.indexOf('приоритет') !== -1) {
-            return 'priority';
-        }
-        if (canonical.indexOf('sla') !== -1 || canonical.indexOf('slm') !== -1) {
-            return 'sla';
-        }
-        if (canonical.indexOf('норматив') !== -1 || canonical.indexOf('дедлайн') !== -1 || canonical.indexOf('срок') !== -1) {
-            return 'dueAt';
-        }
-        if (canonical.indexOf('создан') !== -1 || canonical.indexOf('дата открытия') !== -1 || canonical.indexOf('зарегистр') !== -1) {
-            return 'createdAt';
-        }
-        if (canonical.indexOf('контакт') !== -1 || canonical.indexOf('ответственный') !== -1) {
-            return 'contact';
-        }
-        if (canonical.indexOf('пользователь') !== -1 || canonical.indexOf('заявитель') !== -1 || canonical.indexOf('податель') !== -1) {
-            return 'requester';
-        }
-        if (canonical.indexOf('тег') !== -1 || canonical.indexOf('метка') !== -1) {
-            return 'tags';
-        }
-        if (canonical.indexOf('сервис') !== -1 || canonical.indexOf('услуга') !== -1) {
-            return 'service';
-        }
-        return '';
-    }
-
-    function normalizeRow(row, columns) {
-        const normalized = {};
-        const seenKeys = {};
-        for (let i = 0; i < columns.length; i += 1) {
-            const column = columns[i];
-            const canonical = normalizeHeaderKey(column);
-            if (!canonical) continue;
-            const key = mapCanonicalHeader(canonical);
-            if (!key || seenKeys[key]) continue;
-            seenKeys[key] = true;
-            const rawValue = row[column];
-            const cleaned = typeof rawValue === 'string' ? rawValue.trim() : rawValue;
-            normalized[key] = cleaned != null ? cleaned : '';
-        }
-        normalized.title = normalized.title || '';
-        normalized.description = normalized.description || '';
-        normalized.createdAt = normalized.createdAt || '';
-        normalized.id = normalized.id || '';
-        normalized.priority = normalized.priority || '';
-        normalized.sla = normalized.sla || '';
-        normalized.contact = normalized.contact || '';
-        normalized.requester = normalized.requester || '';
-        normalized.service = normalized.service || '';
-        normalized.tags = normalized.tags || '';
-        if (!normalized.author) {
-            if (normalized.requester) {
-                normalized.author = normalized.requester;
-            } else if (normalized.contact) {
-                normalized.author = normalized.contact;
-            }
-        }
-        normalized._raw = row;
-        normalized._searchBlob = [
-            normalized.id,
-            normalized.author,
-            normalized.contact,
-            normalized.requester,
-            normalized.title,
-            normalized.description,
-            normalized.service,
-            normalized.tags
-        ]
-            .filter(Boolean)
-            .join(' \n ')
-            .toLowerCase();
-        return normalized;
-    }
-
-    function normalizeHeaderKey(value) {
-        if (value == null) return '';
-        let text = String(value);
-        let result = '';
-        let lastSpace = false;
-        for (let i = 0; i < text.length; i += 1) {
-            const code = text.charCodeAt(i);
-            if (code === 0xfeff) {
-                continue;
-            }
-            let ch = text[i];
-            if (ch === '\u00A0') {
-                ch = ' ';
-            }
-            if (ch === 'ё') {
-                ch = 'е';
-            } else if (ch === 'Ё') {
-                ch = 'Е';
-            }
-            const lower = ch.toLowerCase();
-            const lowerCode = lower.charCodeAt(0);
-            const isLatin = lowerCode >= 97 && lowerCode <= 122;
-            const isDigit = lowerCode >= 48 && lowerCode <= 57;
-            const isCyr = lowerCode >= 1072 && lowerCode <= 1103;
-            if (isLatin || isDigit || isCyr) {
-                result += lower;
-                lastSpace = false;
-            } else {
-                if (!lastSpace && result.length) {
-                    result += ' ';
-                    lastSpace = true;
-                }
-            }
-        }
-        return result.trim().replace(/\s+/g, ' ');
     }
 
     function getRecords() {

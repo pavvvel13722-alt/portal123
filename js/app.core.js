@@ -285,17 +285,26 @@
     function decodeBuffer(buffer) {
         const view = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
         const candidates = [];
+        let utf8WasValid = false;
         try {
-            const utf8Decoder = new TextDecoder('utf-8');
-            const utf8Text = utf8Decoder.decode(view);
-            candidates.push({ encoding: 'utf-8', text: utf8Text, score: scoreDecodedText(utf8Text) });
+            const strictUtf8 = new TextDecoder('utf-8', { fatal: true });
+            const text = strictUtf8.decode(view);
+            utf8WasValid = true;
+            candidates.push({ encoding: 'utf-8', text, score: scoreDecodedText(text) + 500 });
         } catch (err) {
-            console.warn('Не удалось декодировать как UTF-8', err);
+            try {
+                const relaxedUtf8 = new TextDecoder('utf-8');
+                const text = relaxedUtf8.decode(view);
+                candidates.push({ encoding: 'utf-8', text, score: scoreDecodedText(text) });
+            } catch (errorUtf8) {
+                console.warn('Не удалось декодировать как UTF-8', errorUtf8);
+            }
         }
         try {
             const winDecoder = new TextDecoder('windows-1251');
             const winText = winDecoder.decode(view);
-            candidates.push({ encoding: 'windows-1251', text: winText, score: scoreDecodedText(winText) });
+            const bonus = utf8WasValid ? -500 : 0;
+            candidates.push({ encoding: 'windows-1251', text: winText, score: scoreDecodedText(winText) + bonus });
         } catch (err) {
             console.warn('Не удалось декодировать как Windows-1251', err);
         }

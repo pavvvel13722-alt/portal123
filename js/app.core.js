@@ -256,7 +256,7 @@ const DEFAULTS = {
 
     function updateThemeButton(button, theme) {
         const isDark = theme === 'dark';
-        button.textContent = isDark ? '☀️ Светлая тема' : '🌙 Тёмная тема';
+        button.textContent = isDark ? 'Светлая тема' : 'Тёмная тема';
         button.setAttribute('aria-pressed', String(isDark));
     }
 

@@ -15,9 +15,9 @@
                 <p>Работает офлайн, данные остаются локально</p>
             </div>
             <div class="header-controls">
-                <button id="theme-toggle" class="button button--ghost" type="button" aria-label="Переключить тему">🌙 Тёмная тема</button>
+                <button id="theme-toggle" class="button button--ghost" type="button" aria-label="Переключить тему">Темная тема</button>
                 <div class="upload">
-                    <label for="csv-file" class="upload__label">📁 Загрузить CSV (Windows-1251)</label>
+                    <label for="csv-file" class="upload__label">Загрузить CSV (Windows-1251)</label>
                     <input type="file" id="csv-file" accept=".csv" />
                     <span id="upload-info" class="upload__info">Файл не загружен</span>
                 </div>
@@ -35,8 +35,8 @@
                     <div class="settings" id="duplicate-settings"></div>
                 </div>
                 <div class="actions">
-                    <button id="btn-run-duplicates" class="button button--primary" disabled>🔍 Найти дубли</button>
-                    <button id="btn-export-duplicates" class="button" disabled>📤 Экспорт дублей (CSV)</button>
+                    <button id="btn-run-duplicates" class="button button--primary" disabled>Найти дубли</button>
+                    <button id="btn-export-duplicates" class="button" disabled>Экспорт дублей (CSV)</button>
                 </div>
                 <div id="duplicate-results" class="results"></div>
             </section>
@@ -51,9 +51,9 @@
                             <div class="categories__header">
                                 <h3>Категории</h3>
                                 <div class="categories__actions">
-                                    <button id="btn-import-categories" class="button button--ghost" type="button">📥 Импорт</button>
-                                    <button id="btn-export-categories" class="button button--ghost" type="button">📤 Экспорт</button>
-                                    <button id="btn-add-category" class="button button--primary" type="button">➕ Добавить</button>
+                                    <button id="btn-import-categories" class="button button--ghost" type="button">Импорт</button>
+                                    <button id="btn-export-categories" class="button button--ghost" type="button">Экспорт</button>
+                                    <button id="btn-add-category" class="button button--primary" type="button">Добавить</button>
                                 </div>
                             </div>
                             <ul id="category-list" class="categories__list"></ul>
@@ -72,7 +72,7 @@
                                     <div class="multi-select" data-multi="filter-status">
                                         <button type="button" class="multi-select__trigger" aria-haspopup="listbox" aria-expanded="false">
                                             <span class="multi-select__label">Все статусы</span>
-                                            <span class="multi-select__icon">▾</span>
+                                            <span class="multi-select__icon">v</span>
                                         </button>
                                         <div class="multi-select__dropdown" role="listbox" hidden></div>
                                     </div>
@@ -83,7 +83,7 @@
                                     <div class="multi-select" data-multi="filter-priority">
                                         <button type="button" class="multi-select__trigger" aria-haspopup="listbox" aria-expanded="false">
                                             <span class="multi-select__label">Все приоритеты</span>
-                                            <span class="multi-select__icon">▾</span>
+                                            <span class="multi-select__icon">v</span>
                                         </button>
                                         <div class="multi-select__dropdown" role="listbox" hidden></div>
                                     </div>
@@ -93,9 +93,9 @@
                             <div class="search-actions">
                                 <div id="search-result-count" class="search-result-count">Найдено: 0</div>
                                 <div class="search-actions__buttons">
-                                    <button id="btn-reset-filters" class="button button--ghost" type="button">↺ Сбросить фильтры</button>
-                                    <button id="btn-run-search" class="button button--primary" type="button" disabled>🔎 Найти</button>
-                                    <button id="btn-export-search" class="button" type="button" disabled>📤 Экспорт результатов (CSV)</button>
+                                    <button id="btn-reset-filters" class="button button--ghost" type="button">Сбросить фильтры</button>
+                                    <button id="btn-run-search" class="button button--primary" type="button" disabled>Найти</button>
+                                    <button id="btn-export-search" class="button" type="button" disabled>Экспорт результатов (CSV)</button>
                                 </div>
                             </div>
                         </div>
@@ -116,7 +116,7 @@
                                 <div class="multi-select" data-multi="tag-filter-template">
                                     <button type="button" class="multi-select__trigger" aria-haspopup="listbox" aria-expanded="false">
                                         <span class="multi-select__label">Все шаблоны</span>
-                                        <span class="multi-select__icon">▾</span>
+                                        <span class="multi-select__icon">v</span>
                                     </button>
                                     <div class="multi-select__dropdown" role="listbox" hidden></div>
                                 </div>
@@ -127,7 +127,7 @@
                                 <div class="multi-select" data-multi="tag-filter-status">
                                     <button type="button" class="multi-select__trigger" aria-haspopup="listbox" aria-expanded="false">
                                         <span class="multi-select__label">Решено, Выполнено</span>
-                                        <span class="multi-select__icon">▾</span>
+                                        <span class="multi-select__icon">v</span>
                                     </button>
                                     <div class="multi-select__dropdown" role="listbox" hidden></div>
                                 </div>
@@ -164,10 +164,10 @@
                             </label>
                         </fieldset>
                         <div class="filters-group filters-group--actions">
-                            <button id="btn-run-tags" class="button button--primary" type="button" disabled>🔖 Найти теги</button>
-                            <button id="btn-export-tags-csv" class="button" type="button" disabled>📤 Экспорт CSV</button>
-                            <button id="btn-export-tags-json" class="button" type="button" disabled>📤 Экспорт JSON</button>
-                            <button id="btn-reset-tags" class="button button--ghost" type="button">↺ Сброс</button>
+                            <button id="btn-run-tags" class="button button--primary" type="button" disabled>Найти теги</button>
+                            <button id="btn-export-tags-csv" class="button" type="button" disabled>Экспорт CSV</button>
+                            <button id="btn-export-tags-json" class="button" type="button" disabled>Экспорт JSON</button>
+                            <button id="btn-reset-tags" class="button button--ghost" type="button">Сброс</button>
                         </div>
                     </aside>
                     <section class="tags-layout__results" id="tag-results">
@@ -188,7 +188,7 @@
             <form id="category-form" class="modal__content">
                 <div class="modal__header">
                     <h3 id="category-modal-title">Категория</h3>
-                    <button type="button" class="modal__close" data-modal-close aria-label="Закрыть">✕</button>
+                    <button type="button" class="modal__close" data-modal-close aria-label="Закрыть">X</button>
                 </div>
                 <div class="modal__body">
                     <label class="modal__field">

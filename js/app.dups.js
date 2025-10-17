@@ -45,7 +45,7 @@
     document.getElementById('btn-run-duplicates').addEventListener('click', () => {
         if (!currentRecords.length) return;
         const settings = AppCore.getSettings().duplicates;
-        document.getElementById('btn-run-duplicates').textContent = '⏳ Обработка...';
+        document.getElementById('btn-run-duplicates').textContent = 'Обработка...';
         document.getElementById('btn-run-duplicates').disabled = true;
         const payload = {
             records: prepareWorkerPayload(currentRecords),
@@ -135,7 +135,7 @@
     function resetRunButton() {
         const runButton = document.getElementById('btn-run-duplicates');
         if (runButton) {
-            runButton.textContent = '🔍 Найти дубли';
+            runButton.textContent = 'Найти дубли';
             runButton.disabled = false;
         }
     }
@@ -271,7 +271,7 @@
             titleWrap.className = 'record__title';
             const badge = document.createElement('span');
             badge.className = 'record__badge';
-            badge.textContent = record.isPrimary ? '🟩' : '🟥';
+            badge.textContent = record.isPrimary ? 'Осн.' : 'Дубль';
             titleWrap.appendChild(badge);
             const link = document.createElement('a');
             const recordId = record.id ? record.id : '';
@@ -339,13 +339,13 @@
             const openButton = document.createElement('button');
             openButton.dataset.action = 'open';
             openButton.dataset.id = recordId;
-            openButton.textContent = '🔗 Открыть';
+            openButton.textContent = 'Открыть';
             actions.appendChild(openButton);
             const copyButton = document.createElement('button');
             copyButton.dataset.action = 'copy';
             copyButton.dataset.id = recordId;
             copyButton.dataset.primary = masterId;
-            copyButton.textContent = '📋 Текст закрытия';
+            copyButton.textContent = 'Текст закрытия';
             if (record.isPrimary) copyButton.disabled = true;
             actions.appendChild(copyButton);
             row.appendChild(actions);
@@ -375,9 +375,9 @@
             const primaryId = button.dataset.primary || id;
             const text = 'Ошибочное обращение\nДубль обращения ' + primaryId + '. Работы продолжаются там.';
             navigator.clipboard.writeText(text).then(function () {
-                button.textContent = '✅ Скопировано';
+                button.textContent = 'Скопировано';
                 setTimeout(function () {
-                    button.textContent = '📋 Текст закрытия';
+                    button.textContent = 'Текст закрытия';
                 }, 2000);
             }).catch(function () {
                 alert('Не удалось скопировать текст. Скопируйте вручную:\n' + text);

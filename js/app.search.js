@@ -486,14 +486,14 @@
             editBtn.dataset.action = 'edit';
             editBtn.type = 'button';
             editBtn.title = 'Редактировать';
-            editBtn.textContent = '✏️';
+            editBtn.textContent = 'Ред.';
             actions.appendChild(editBtn);
             const deleteBtn = document.createElement('button');
             deleteBtn.className = 'button button--ghost';
             deleteBtn.dataset.action = 'delete';
             deleteBtn.type = 'button';
             deleteBtn.title = 'Удалить';
-            deleteBtn.textContent = '🗑️';
+            deleteBtn.textContent = 'Удал.';
             actions.appendChild(deleteBtn);
             header.appendChild(actions);
             li.appendChild(header);

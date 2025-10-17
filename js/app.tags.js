@@ -266,8 +266,8 @@
         html += '<div class="tag-card__meta">Обращений: ' + formatInteger(item.documentCount) + processedMeta + '</div>';
         html += '</div>';
         html += '<div class="tag-card__actions">';
-        html += '<button class="button button--ghost" type="button" data-action="copy-tags" data-template="' + escapeAttribute(normalized) + '">📋 Копировать</button>';
-        html += '<button class="button button--primary" type="button" data-action="save-tags" data-template="' + escapeAttribute(normalized) + '">💾 Сохранить</button>';
+        html += '<button class="button button--ghost" type="button" data-action="copy-tags" data-template="' + escapeAttribute(normalized) + '">Копировать</button>';
+        html += '<button class="button button--primary" type="button" data-action="save-tags" data-template="' + escapeAttribute(normalized) + '">Сохранить</button>';
         html += '</div>';
         html += '</header>';
         html += '<div class="tag-chip-list" data-chip-list="' + escapeAttribute(normalized) + '">';
@@ -275,7 +275,7 @@
         html += '</div>';
         html += '<div class="tag-card__add" data-add-container="' + escapeAttribute(normalized) + '">';
         html += '<input type="text" placeholder="Новый тег" data-tag-input="' + escapeAttribute(normalized) + '">';
-        html += '<button class="button" type="button" data-action="add-tag" data-template="' + escapeAttribute(normalized) + '">➕ Добавить</button>';
+        html += '<button class="button" type="button" data-action="add-tag" data-template="' + escapeAttribute(normalized) + '">Добавить</button>';
         html += '</div>';
         html += tableHtml;
         return html;
@@ -297,8 +297,8 @@
             chipHtml += '<span class="tag-chip__score">' + escapeHtml(scoreLabel) + '</span>';
             chipHtml += '</span>';
             chipHtml += '<span class="tag-chip__actions">';
-            chipHtml += '<button class="tag-chip__action" type="button" data-action="edit-tag" aria-label="Редактировать тег">✏️</button>';
-            chipHtml += '<button class="tag-chip__action" type="button" data-action="remove-tag" aria-label="Удалить тег">✕</button>';
+            chipHtml += '<button class="tag-chip__action" type="button" data-action="edit-tag" aria-label="Редактировать тег">Ред.</button>';
+            chipHtml += '<button class="tag-chip__action" type="button" data-action="remove-tag" aria-label="Удалить тег">Удал.</button>';
             chipHtml += '</span>';
             chipHtml += '</span>';
             return chipHtml;
@@ -570,10 +570,10 @@
         const button = document.getElementById('btn-run-tags');
         if (!button) return;
         if (isBusy) {
-            button.textContent = '⏳ Обработка...';
+            button.textContent = 'Обработка...';
             button.disabled = true;
         } else {
-            button.textContent = '🔖 Найти теги';
+            button.textContent = 'Найти теги';
             button.disabled = !currentRecords.length;
         }
     }

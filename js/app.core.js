@@ -436,28 +436,45 @@
         return { data: dataRows, meta: { fields: headers } };
     }
 
+    const HEADER_KEY_MAP = {
+        'id': 'id',
+        'номер обращения': 'id',
+        'автор': 'author',
+        'автор обращения': 'author',
+        'автор заявки': 'author',
+        'инициатор': 'author',
+        'название': 'title',
+        'тема': 'title',
+        'описание': 'description',
+        'статус': 'status',
+        'приоритет': 'priority',
+        'создано': 'createdAt',
+        'дата создания': 'createdAt',
+        'нормативный срок': 'dueAt',
+        'дедлайн': 'dueAt',
+        'sla индикатор': 'sla',
+        'slm индикатор': 'sla',
+        'sla': 'sla',
+        'slm': 'sla',
+        'контактное лицо': 'contact',
+        'контакт': 'contact',
+        'пользователь': 'requester',
+        'инициатор обращения': 'requester',
+        'сервис': 'service',
+        'теги': 'tags',
+        'тэги': 'tags'
+    };
+
     function normalizeRow(row, columns) {
-        const mapping = {
-            ID: 'id',
-            Автор: 'author',
-            Название: 'title',
-            Описание: 'description',
-            Статус: 'status',
-            Приоритет: 'priority',
-            Создано: 'createdAt',
-            'Нормативный срок': 'dueAt',
-            'SLA-индикатор': 'sla',
-            'SLM-индикатор': 'sla',
-            'Контактное лицо': 'contact',
-            'Пользователь': 'requester',
-            Сервис: 'service',
-            Теги: 'tags',
-            'Тэги': 'tags'
-        };
         const normalized = {};
-        for (const column of columns) {
-            if (!Object.prototype.hasOwnProperty.call(mapping, column)) continue;
-            const key = mapping[column];
+        const seenKeys = {};
+        for (let i = 0; i < columns.length; i += 1) {
+            const column = columns[i];
+            const canonical = normalizeHeaderKey(column);
+            if (!canonical) continue;
+            const key = HEADER_KEY_MAP[canonical];
+            if (!key || seenKeys[key]) continue;
+            seenKeys[key] = true;
             const rawValue = row[column];
             const cleaned = typeof rawValue === 'string' ? rawValue.trim() : rawValue;
             normalized[key] = cleaned != null ? cleaned : '';
@@ -472,6 +489,13 @@
         normalized.requester = normalized.requester || '';
         normalized.service = normalized.service || '';
         normalized.tags = normalized.tags || '';
+        if (!normalized.author) {
+            if (normalized.requester) {
+                normalized.author = normalized.requester;
+            } else if (normalized.contact) {
+                normalized.author = normalized.contact;
+            }
+        }
         normalized._raw = row;
         normalized._searchBlob = [
             normalized.id,
@@ -487,6 +511,43 @@
             .join(' \n ')
             .toLowerCase();
         return normalized;
+    }
+
+    function normalizeHeaderKey(value) {
+        if (value == null) return '';
+        let text = String(value);
+        let result = '';
+        let lastSpace = false;
+        for (let i = 0; i < text.length; i += 1) {
+            const code = text.charCodeAt(i);
+            if (code === 0xfeff) {
+                continue;
+            }
+            let ch = text[i];
+            if (ch === '\u00A0') {
+                ch = ' ';
+            }
+            if (ch === 'ё') {
+                ch = 'е';
+            } else if (ch === 'Ё') {
+                ch = 'Е';
+            }
+            const lower = ch.toLowerCase();
+            const lowerCode = lower.charCodeAt(0);
+            const isLatin = lowerCode >= 97 && lowerCode <= 122;
+            const isDigit = lowerCode >= 48 && lowerCode <= 57;
+            const isCyr = lowerCode >= 1072 && lowerCode <= 1103;
+            if (isLatin || isDigit || isCyr) {
+                result += lower;
+                lastSpace = false;
+            } else {
+                if (!lastSpace && result.length) {
+                    result += ' ';
+                    lastSpace = true;
+                }
+            }
+        }
+        return result.trim().replace(/\s+/g, ' ');
     }
 
     function getRecords() {

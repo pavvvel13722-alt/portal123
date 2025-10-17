@@ -308,7 +308,7 @@
         try {
             const winDecoder = new TextDecoder('windows-1251');
             const winText = winDecoder.decode(view);
-            const bonus = utf8WasValid ? -500 : 0;
+            const bonus = utf8WasValid ? -10000 : 0;
             candidates.push({ encoding: 'windows-1251', text: winText, score: Shared.scoreDecodedText(winText) + bonus });
         } catch (err) {
             console.warn('Не удалось декодировать как Windows-1251', err);

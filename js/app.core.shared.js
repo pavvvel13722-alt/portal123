@@ -317,6 +317,20 @@
             return { data: [], meta: { fields: header ? [] : null } };
         }
 
+        var expectedLength = rows[0] ? rows[0].length : 0;
+        if (expectedLength > 1 && rows.length > 1) {
+            var mismatch = 0;
+            for (var r = 1; r < rows.length; r += 1) {
+                if (rows[r].length !== expectedLength) {
+                    mismatch += 1;
+                }
+            }
+            var tolerance = Math.max(3, Math.floor(rows.length * 0.01));
+            if (mismatch > tolerance) {
+                return parseCsvLoose(text, delimiter, header, skipEmptyLines);
+            }
+        }
+
         if (!header) {
             return { data: rows, meta: { fields: null } };
         }
@@ -334,6 +348,78 @@
         });
 
         return { data: dataRows, meta: { fields: headers } };
+    }
+
+    function parseCsvLoose(text, delimiter, header, skipEmptyLines) {
+        var normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        var lines = normalized.split('\n');
+        var rows = [];
+        var delimiterLength = delimiter.length;
+
+        function splitLine(line) {
+            var columns = [];
+            if (delimiterLength === 0) {
+                columns.push(line);
+                return columns;
+            }
+            var start = 0;
+            while (start <= line.length) {
+                var index = line.indexOf(delimiter, start);
+                if (index === -1) {
+                    columns.push(line.slice(start));
+                    break;
+                }
+                columns.push(line.slice(start, index));
+                start = index + delimiterLength;
+            }
+            return columns;
+        }
+
+        function cleanCell(value) {
+            if (value == null) return '';
+            var text = String(value);
+            if (text.length >= 2 && text.charAt(0) === '"' && text.charAt(text.length - 1) === '"') {
+                text = text.slice(1, text.length - 1).replace(/""/g, '"');
+            }
+            return text.trim();
+        }
+
+        for (var i = 0; i < lines.length; i += 1) {
+            var line = lines[i];
+            if (skipEmptyLines && (!line || line.trim() === '')) {
+                continue;
+            }
+            var parts = splitLine(line);
+            for (var p = 0; p < parts.length; p += 1) {
+                parts[p] = cleanCell(parts[p]);
+            }
+            rows.push(parts);
+        }
+
+        if (!rows.length) {
+            return { data: [], meta: { fields: header ? [] : null } };
+        }
+
+        if (!header) {
+            return { data: rows, meta: { fields: null } };
+        }
+
+        var headers = rows[0].map(function (cell) { return cleanCell(cell); });
+        var resultRows = [];
+        for (var rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
+            var rowParts = rows[rowIndex];
+            if (!rowParts || (!rowParts.length && skipEmptyLines)) continue;
+            var entry = {};
+            for (var col = 0; col < headers.length; col += 1) {
+                var key = headers[col];
+                if (!key) continue;
+                var cellValue = rowParts[col] != null ? rowParts[col] : '';
+                entry[key] = typeof cellValue === 'string' ? cellValue.trim() : cellValue;
+            }
+            resultRows.push(entry);
+        }
+
+        return { data: resultRows, meta: { fields: headers } };
     }
 
     function detectDelimiter(text) {

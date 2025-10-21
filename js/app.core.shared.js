@@ -188,12 +188,14 @@
         var rows = [];
         var delimiterLength = delimiter.length;
         var field = '';
+        var fieldOnlyWhitespace = true;
         var row = [];
         var inQuotes = false;
 
         function pushField() {
             row.push(field);
             field = '';
+            fieldOnlyWhitespace = true;
         }
 
         function pushRow() {
@@ -213,6 +215,7 @@
                 if (inQuotes) {
                     if (text[index + 1] === '"') {
                         field += '"';
+                        fieldOnlyWhitespace = false;
                         index += 1;
                         continue;
                     }
@@ -242,12 +245,20 @@
                         continue;
                     }
                     field += '"';
+                    fieldOnlyWhitespace = false;
                     continue;
                 }
                 if (field.length === 0) {
                     inQuotes = true;
+                    continue;
+                }
+                if (fieldOnlyWhitespace) {
+                    field = '';
+                    fieldOnlyWhitespace = true;
+                    inQuotes = true;
                 } else {
                     field += '"';
+                    fieldOnlyWhitespace = false;
                 }
                 continue;
             }
@@ -269,6 +280,9 @@
                 }
             }
             field += char;
+            if (char !== ' ' && char !== '\t') {
+                fieldOnlyWhitespace = false;
+            }
         }
         pushField();
         pushRow();

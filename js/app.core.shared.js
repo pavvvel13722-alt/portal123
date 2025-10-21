@@ -92,190 +92,43 @@
         return { modeLength: modeLength, consistency: consistency };
     }
 
-    function getPapaParser() {
-        if (global.Papa && typeof global.Papa.parse === 'function') {
-            return global.Papa;
-        }
-        if (typeof Papa !== 'undefined' && Papa && typeof Papa.parse === 'function') {
-            return Papa;
-        }
-        if (typeof require === 'function') {
-            try {
-                var papaLocal = require('./vendor/papaparse.min.js');
-                if (papaLocal && typeof papaLocal.parse === 'function') {
-                    return papaLocal;
-                }
-            } catch (errLocal) {
-                if (typeof console !== 'undefined' && console && typeof console.warn === 'function') {
-                    console.warn('Не удалось загрузить papaparse.min.js из локального каталога', errLocal);
-                }
-            }
-            try {
-                var papaParent = require('../vendor/papaparse.min.js');
-                if (papaParent && typeof papaParent.parse === 'function') {
-                    return papaParent;
-                }
-            } catch (errParent) {
-                if (typeof console !== 'undefined' && console && typeof console.warn === 'function') {
-                    console.warn('Не удалось загрузить papaparse.min.js из родительского каталога', errParent);
-                }
-            }
-        }
-        return null;
-    }
-
     function parseCsv(text, options) {
         var opts = options || {};
-        var delimiter = opts.delimiter != null ? opts.delimiter : ',';
-        var skipEmptyLines = Boolean(opts.skipEmptyLines);
+        var delimiter = opts.delimiter != null ? String(opts.delimiter) : ',';
+        if (!delimiter) {
+            delimiter = ',';
+        }
         var header = Boolean(opts.header);
-        var papa = getPapaParser();
-        if (papa) {
-            try {
-                var result = papa.parse(text, {
-                    delimiter: delimiter,
-                    skipEmptyLines: skipEmptyLines,
-                    header: header
-                });
-                if (result && result.data && result.data.length) {
-                    if (!header) {
-                        if (!Array.isArray(result.data[0])) {
-                            var firstField = result.data[0];
-                            if (firstField && typeof firstField === 'object') {
-                                var soleKey = Object.keys(firstField)[0];
-                                if (soleKey && typeof firstField[soleKey] === 'string' && firstField[soleKey].indexOf(delimiter) !== -1) {
-                                    throw new Error('PapaParse produced unsplit rows');
-                                }
-                            }
-                        }
-                        return { data: result.data, meta: { fields: null } };
-                    }
-                    var fields = [];
-                    if (result.meta && Array.isArray(result.meta.fields) && result.meta.fields.length) {
-                        fields = result.meta.fields.slice();
-                    } else {
-                        var firstRow = result.data[0];
-                        for (var prop in firstRow) {
-                            if (Object.prototype.hasOwnProperty.call(firstRow, prop)) {
-                                fields.push(prop);
-                            }
-                        }
-                    }
-                    if (fields.length <= 1) {
-                        var arrayResult = papa.parse(text, {
-                            delimiter: delimiter,
-                            skipEmptyLines: skipEmptyLines,
-                            header: false
-                        });
-                        if (arrayResult && Array.isArray(arrayResult.data) && arrayResult.data.length > 1 && Array.isArray(arrayResult.data[0])) {
-                            var headerRow = arrayResult.data[0].map(function (cell) {
-                                return cell == null ? '' : String(cell).trim();
-                            });
-                            var rebuiltRows = [];
-                            for (var r = 1; r < arrayResult.data.length; r += 1) {
-                                var rowArray = arrayResult.data[r];
-                                if (!rowArray || !rowArray.length) continue;
-                                var entry = {};
-                                for (var c = 0; c < headerRow.length; c += 1) {
-                                    var headerKey = headerRow[c];
-                                    if (!headerKey) continue;
-                                    var cellValue = rowArray[c];
-                                    entry[headerKey] = typeof cellValue === 'string' ? cellValue.trim() : cellValue;
-                                }
-                                rebuiltRows.push(entry);
-                            }
-                            if (headerRow.length > 1 && rebuiltRows.length) {
-                                return { data: rebuiltRows, meta: { fields: headerRow } };
-                            }
-                        }
-                        throw new Error('PapaParse header collapsed into single column');
-                    }
-                    var normalizedRows = result.data.map(function (row) {
-                        var entry = {};
-                        for (var index = 0; index < fields.length; index += 1) {
-                            var key = fields[index];
-                            var value = row[key];
-                            entry[key] = typeof value === 'string' ? value.trim() : value;
-                        }
-                        return entry;
-                    });
-                    return { data: normalizedRows, meta: { fields: fields } };
-                }
-            } catch (errPapa) {
-                if (typeof console !== 'undefined' && console && typeof console.warn === 'function') {
-                    console.warn('Papa.parse не смог обработать CSV, используется резервный парсер', errPapa);
-                }
-            }
-        }
-        return parseCsvManual(text, delimiter, header, skipEmptyLines);
-    }
+        var skipEmptyLines = Boolean(opts.skipEmptyLines);
 
-    function looksLikeRowStart(text, startIndex, delimiter, delimiterLength) {
-        var index = startIndex;
-        var limit = Math.min(text.length, index + 128);
-        var sample = '';
-        while (index < limit) {
-            var ch = text.charAt(index);
-            if (ch === '\r' || ch === '\n') {
-                break;
-            }
-            sample += ch;
-            index += 1;
+        var input = text == null ? '' : String(text);
+        if (!input) {
+            return { data: [], meta: { fields: header ? [] : null } };
         }
-        if (!sample) {
-            return false;
+        if (input.charCodeAt(0) === 0xfeff) {
+            input = input.slice(1);
         }
-        sample = sample.replace(/^[ \t]+/, '');
-        if (!sample) {
-            return false;
-        }
-        var delimiterIndex;
-        if (delimiterLength === 1) {
-            delimiterIndex = sample.indexOf(delimiter);
-        } else {
-            delimiterIndex = sample.indexOf(delimiter);
-        }
-        if (delimiterIndex === -1 || delimiterIndex > 64) {
-            return false;
-        }
-        var prefix = sample.slice(0, delimiterIndex);
-        if (!prefix) {
-            return false;
-        }
-        if (!/^[0-9a-zA-Zа-яА-Я_ \-\[\]\(\)#\/]+$/.test(prefix)) {
-            return false;
-        }
-        return true;
-    }
 
-    function shouldForceCloseQuote(text, position, delimiter, delimiterLength) {
-        var index = position + 1;
-        if (text.charAt(position) === '\r' && text.charAt(index) === '\n') {
-            index += 1;
-        }
-        while (index < text.length) {
-            var ch = text.charAt(index);
-            if (ch !== ' ' && ch !== '\t') {
-                break;
-            }
-            index += 1;
-        }
-        if (index >= text.length) {
-            return true;
-        }
-        if (looksLikeRowStart(text, index, delimiter, delimiterLength)) {
-            return true;
-        }
-        return false;
-    }
-
-    function parseCsvManual(text, delimiter, header, skipEmptyLines) {
         var rows = [];
-        var delimiterLength = delimiter.length;
+        var row = [];
         var field = '';
         var fieldOnlyWhitespace = true;
-        var row = [];
         var inQuotes = false;
+        var delimiterLength = delimiter.length;
+        if (delimiterLength === 0) {
+            delimiterLength = 1;
+            delimiter = ',';
+        }
+
+        function rowHasContent(columns) {
+            for (var i = 0; i < columns.length; i += 1) {
+                var value = columns[i];
+                if (value != null && String(value).trim() !== '') {
+                    return true;
+                }
+            }
+            return false;
+        }
 
         function pushField() {
             row.push(field);
@@ -284,53 +137,25 @@
         }
 
         function pushRow() {
-            var isEmpty = row.every(function (value) {
-                var str = value == null ? '' : String(value);
-                return str.trim().length === 0;
-            });
-            if (!(skipEmptyLines && isEmpty)) {
-                rows.push(row.slice());
+            if (skipEmptyLines && !rowHasContent(row)) {
+                row = [];
+                return;
             }
+            rows.push(row.slice());
             row = [];
         }
 
-        for (var index = 0; index < text.length; index += 1) {
-            var char = text[index];
+        for (var index = 0; index < input.length; index += 1) {
+            var char = input.charAt(index);
             if (char === '"') {
                 if (inQuotes) {
-                    if (text[index + 1] === '"') {
+                    if (input.charAt(index + 1) === '"') {
                         field += '"';
                         fieldOnlyWhitespace = false;
                         index += 1;
                         continue;
                     }
-                    var lookaheadIndex = index + 1;
-                    while (lookaheadIndex < text.length) {
-                        var lookaheadChar = text[lookaheadIndex];
-                        if (lookaheadChar === ' ' || lookaheadChar === '\t') {
-                            lookaheadIndex += 1;
-                            continue;
-                        }
-                        break;
-                    }
-                    var nextChar = lookaheadIndex < text.length ? text[lookaheadIndex] : null;
-                    var shouldClose = nextChar === null || nextChar === '\r' || nextChar === '\n';
-                    if (!shouldClose) {
-                        if (delimiterLength === 1) {
-                            shouldClose = nextChar === delimiter;
-                        } else if (
-                            lookaheadIndex + delimiterLength <= text.length &&
-                            text.slice(lookaheadIndex, lookaheadIndex + delimiterLength) === delimiter
-                        ) {
-                            shouldClose = true;
-                        }
-                    }
-                    if (shouldClose) {
-                        inQuotes = false;
-                        continue;
-                    }
-                    field += '"';
-                    fieldOnlyWhitespace = false;
+                    inQuotes = false;
                     continue;
                 }
                 if (field.length === 0) {
@@ -341,38 +166,22 @@
                     field = '';
                     fieldOnlyWhitespace = true;
                     inQuotes = true;
-                } else {
-                    field += '"';
-                    fieldOnlyWhitespace = false;
-                }
-                continue;
-            }
-            if ((char === '\n' || char === '\r') && inQuotes) {
-                if (!shouldForceCloseQuote(text, index, delimiter, delimiterLength)) {
-                    field += char;
-                    fieldOnlyWhitespace = false;
                     continue;
                 }
-                inQuotes = false;
-                pushField();
-                pushRow();
-                if (char === '\r' && text[index + 1] === '\n') {
-                    index += 1;
-                }
-                continue;
             }
             if (!inQuotes) {
-                if ((delimiterLength === 1 && char === delimiter) || (delimiterLength > 1 && text.slice(index, index + delimiterLength) === delimiter)) {
+                if ((delimiterLength === 1 && char === delimiter) ||
+                    (delimiterLength > 1 && input.slice(index, index + delimiterLength) === delimiter)) {
                     pushField();
                     if (delimiterLength > 1) {
                         index += delimiterLength - 1;
                     }
                     continue;
                 }
-                if (char === '\n' || char === '\r') {
+                if (char === '\r' || char === '\n') {
                     pushField();
                     pushRow();
-                    if (char === '\r' && text[index + 1] === '\n') {
+                    if (char === '\r' && input.charAt(index + 1) === '\n') {
                         index += 1;
                     }
                     continue;
@@ -390,109 +199,32 @@
             return { data: [], meta: { fields: header ? [] : null } };
         }
 
-        var expectedLength = rows[0] ? rows[0].length : 0;
-        if (expectedLength > 1 && rows.length > 1) {
-            var mismatch = 0;
-            for (var r = 1; r < rows.length; r += 1) {
-                if (rows[r].length !== expectedLength) {
-                    mismatch += 1;
-                }
-            }
-            var tolerance = Math.max(3, Math.floor(rows.length * 0.01));
-            if (mismatch > tolerance) {
-                return parseCsvLoose(text, delimiter, header, skipEmptyLines);
-            }
-        }
-
         if (!header) {
             return { data: rows, meta: { fields: null } };
         }
 
-        var headers = rows[0].map(function (item) {
-            return item == null ? '' : String(item).trim();
+        var headers = rows[0].map(function (cell) {
+            return cell == null ? '' : String(cell).trim();
         });
-        var dataRows = rows.slice(1).map(function (columns) {
-            var entry = {};
-            headers.forEach(function (key, idx) {
-                var value = columns[idx] != null ? columns[idx] : '';
-                entry[key] = typeof value === 'string' ? value.trim() : value;
-            });
-            return entry;
-        });
-
-        return { data: dataRows, meta: { fields: headers } };
-    }
-
-    function parseCsvLoose(text, delimiter, header, skipEmptyLines) {
-        var normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-        var lines = normalized.split('\n');
-        var rows = [];
-        var delimiterLength = delimiter.length;
-
-        function splitLine(line) {
-            var columns = [];
-            if (delimiterLength === 0) {
-                columns.push(line);
-                return columns;
-            }
-            var start = 0;
-            while (start <= line.length) {
-                var index = line.indexOf(delimiter, start);
-                if (index === -1) {
-                    columns.push(line.slice(start));
-                    break;
-                }
-                columns.push(line.slice(start, index));
-                start = index + delimiterLength;
-            }
-            return columns;
-        }
-
-        function cleanCell(value) {
-            if (value == null) return '';
-            var text = String(value);
-            if (text.length >= 2 && text.charAt(0) === '"' && text.charAt(text.length - 1) === '"') {
-                text = text.slice(1, text.length - 1).replace(/""/g, '"');
-            }
-            return text.trim();
-        }
-
-        for (var i = 0; i < lines.length; i += 1) {
-            var line = lines[i];
-            if (skipEmptyLines && (!line || line.trim() === '')) {
+        var dataRows = [];
+        for (var r = 1; r < rows.length; r += 1) {
+            var source = rows[r];
+            if (skipEmptyLines && (!source || !rowHasContent(source))) {
                 continue;
             }
-            var parts = splitLine(line);
-            for (var p = 0; p < parts.length; p += 1) {
-                parts[p] = cleanCell(parts[p]);
-            }
-            rows.push(parts);
-        }
-
-        if (!rows.length) {
-            return { data: [], meta: { fields: header ? [] : null } };
-        }
-
-        if (!header) {
-            return { data: rows, meta: { fields: null } };
-        }
-
-        var headers = rows[0].map(function (cell) { return cleanCell(cell); });
-        var resultRows = [];
-        for (var rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
-            var rowParts = rows[rowIndex];
-            if (!rowParts || (!rowParts.length && skipEmptyLines)) continue;
             var entry = {};
-            for (var col = 0; col < headers.length; col += 1) {
-                var key = headers[col];
-                if (!key) continue;
-                var cellValue = rowParts[col] != null ? rowParts[col] : '';
-                entry[key] = typeof cellValue === 'string' ? cellValue.trim() : cellValue;
+            for (var c = 0; c < headers.length; c += 1) {
+                var key = headers[c];
+                if (!key) {
+                    continue;
+                }
+                var value = source && source[c] != null ? source[c] : '';
+                entry[key] = typeof value === 'string' ? value.trim() : value;
             }
-            resultRows.push(entry);
+            dataRows.push(entry);
         }
 
-        return { data: resultRows, meta: { fields: headers } };
+        return { data: dataRows, meta: { fields: headers } };
     }
 
     function detectDelimiter(text) {

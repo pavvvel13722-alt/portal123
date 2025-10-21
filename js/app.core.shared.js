@@ -210,11 +210,44 @@
         for (var index = 0; index < text.length; index += 1) {
             var char = text[index];
             if (char === '"') {
-                if (inQuotes && text[index + 1] === '"') {
+                if (inQuotes) {
+                    if (text[index + 1] === '"') {
+                        field += '"';
+                        index += 1;
+                        continue;
+                    }
+                    var lookaheadIndex = index + 1;
+                    while (lookaheadIndex < text.length) {
+                        var lookaheadChar = text[lookaheadIndex];
+                        if (lookaheadChar === ' ' || lookaheadChar === '\t') {
+                            lookaheadIndex += 1;
+                            continue;
+                        }
+                        break;
+                    }
+                    var nextChar = lookaheadIndex < text.length ? text[lookaheadIndex] : null;
+                    var shouldClose = nextChar === null || nextChar === '\r' || nextChar === '\n';
+                    if (!shouldClose) {
+                        if (delimiterLength === 1) {
+                            shouldClose = nextChar === delimiter;
+                        } else if (
+                            lookaheadIndex + delimiterLength <= text.length &&
+                            text.slice(lookaheadIndex, lookaheadIndex + delimiterLength) === delimiter
+                        ) {
+                            shouldClose = true;
+                        }
+                    }
+                    if (shouldClose) {
+                        inQuotes = false;
+                        continue;
+                    }
                     field += '"';
-                    index += 1;
+                    continue;
+                }
+                if (field.length === 0) {
+                    inQuotes = true;
                 } else {
-                    inQuotes = !inQuotes;
+                    field += '"';
                 }
                 continue;
             }

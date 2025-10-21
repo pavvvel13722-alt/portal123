@@ -496,25 +496,86 @@
     }
 
     function detectDelimiter(text) {
+        if (!text) {
+            return ';';
+        }
         var candidates = [';', ',', '\t', '|'];
-        var sample = extractSample(text, 250);
-        var best = candidates[0];
-        var bestScore = -Infinity;
-        for (var i = 0; i < candidates.length; i += 1) {
+        var sample = extractSample(text, 400);
+        var totals = {};
+        var rowCounts = {};
+        var current = {};
+        var i;
+        for (i = 0; i < candidates.length; i += 1) {
             var delimiter = candidates[i];
-            var parsed = parseCsvManual(sample, delimiter, false, true);
-            if (!parsed.data || !parsed.data.length) continue;
-            var lengths = parsed.data
-                .map(function (row) {
-                    return Array.isArray(row) ? row.length : Object.keys(row || {}).length;
-                })
-                .filter(function (length) { return length > 1; });
-            if (!lengths.length) continue;
-            var stats = getLengthStats(lengths);
-            var score = stats.consistency * 1000 + stats.modeLength;
+            totals[delimiter] = 0;
+            rowCounts[delimiter] = 0;
+            current[delimiter] = 0;
+        }
+        var inQuotes = false;
+        var length = sample.length;
+        for (var index = 0; index < length; index += 1) {
+            var char = sample.charAt(index);
+            if (char === '"') {
+                if (inQuotes && sample.charAt(index + 1) === '"') {
+                    index += 1;
+                } else {
+                    inQuotes = !inQuotes;
+                }
+                continue;
+            }
+            if (!inQuotes) {
+                if (char === '\r' || char === '\n') {
+                    for (i = 0; i < candidates.length; i += 1) {
+                        var delimiterKey = candidates[i];
+                        if (current[delimiterKey] > 0) {
+                            totals[delimiterKey] += current[delimiterKey];
+                            rowCounts[delimiterKey] += 1;
+                        }
+                        current[delimiterKey] = 0;
+                    }
+                    if (char === '\r' && sample.charAt(index + 1) === '\n') {
+                        index += 1;
+                    }
+                    continue;
+                }
+                for (i = 0; i < candidates.length; i += 1) {
+                    var candidate = candidates[i];
+                    var candidateLength = candidate.length;
+                    if (candidateLength === 1) {
+                        if (char === candidate) {
+                            current[candidate] += 1;
+                            break;
+                        }
+                    } else {
+                        if (sample.slice(index, index + candidateLength) === candidate) {
+                            current[candidate] += 1;
+                            index += candidateLength - 1;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        for (i = 0; i < candidates.length; i += 1) {
+            var lastDelimiter = candidates[i];
+            if (current[lastDelimiter] > 0) {
+                totals[lastDelimiter] += current[lastDelimiter];
+                rowCounts[lastDelimiter] += 1;
+            }
+        }
+        var best = candidates[0];
+        var bestScore = -1;
+        for (i = 0; i < candidates.length; i += 1) {
+            var option = candidates[i];
+            var total = totals[option];
+            var rows = rowCounts[option];
+            if (!total || !rows) {
+                continue;
+            }
+            var score = total / rows;
             if (score > bestScore) {
                 bestScore = score;
-                best = delimiter;
+                best = option;
             }
         }
         return best;

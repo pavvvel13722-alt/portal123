@@ -473,7 +473,26 @@
                 };
             }
         }
-        var originalFields = best && best.meta && Array.isArray(best.meta.fields) ? best.meta.fields : [];
+        var sanitized = sanitizeParsedResult(best);
+        sanitized.delimiter = best && best.delimiter ? best.delimiter : (delimiterList.length ? delimiterList[0] : ';');
+        if (isCollapsedResult(sanitized.meta.fields, sanitized.data, sanitized.delimiter)) {
+            var fallbackDelimiter = sanitized.delimiter || detectDelimiter(input);
+            var fallbackRaw = parseCsv(input, { delimiter: fallbackDelimiter, header: false, skipEmptyLines: true });
+            var rebuilt = rebuildFromArrayRows(fallbackRaw, fallbackDelimiter);
+            if ((!rebuilt || rebuilt.meta.fields.length <= 1) && fallbackDelimiter !== ';') {
+                fallbackRaw = parseCsv(input, { delimiter: ';', header: false, skipEmptyLines: true });
+                rebuilt = rebuildFromArrayRows(fallbackRaw, ';');
+            }
+            if (rebuilt && rebuilt.meta && Array.isArray(rebuilt.meta.fields) && rebuilt.meta.fields.length > 1) {
+                sanitized = rebuilt;
+                sanitized.delimiter = fallbackDelimiter;
+            }
+        }
+        return sanitized;
+    }
+
+    function sanitizeParsedResult(parsed) {
+        var originalFields = parsed && parsed.meta && Array.isArray(parsed.meta.fields) ? parsed.meta.fields : [];
         var normalizedFields = [];
         for (var fieldIndex = 0; fieldIndex < originalFields.length; fieldIndex += 1) {
             var headerValue = originalFields[fieldIndex];
@@ -483,7 +502,7 @@
                 normalizedFields.push(String(headerValue).trim());
             }
         }
-        var rawData = best && Array.isArray(best.data) ? best.data : [];
+        var rawData = parsed && Array.isArray(parsed.data) ? parsed.data : [];
         var sanitizedData = [];
         for (var dataIndex = 0; dataIndex < rawData.length; dataIndex += 1) {
             var row = rawData[dataIndex];
@@ -534,12 +553,110 @@
             }
             sanitizedData.push(fallbackRow);
         }
-        if (!best.meta) {
-            best.meta = { fields: [] };
+        return { data: sanitizedData, meta: { fields: normalizedFields } };
+    }
+
+    function isCollapsedResult(fields, data, delimiter) {
+        if (!fields || fields.length <= 1) {
+            return true;
         }
-        best.meta.fields = normalizedFields;
-        best.data = sanitizedData;
-        return best;
+        var firstHeader = fields[0] || '';
+        if (delimiter && typeof firstHeader === 'string' && firstHeader.indexOf(delimiter) !== -1) {
+            return true;
+        }
+        if (!data || !data.length) {
+            return false;
+        }
+        var sample = data[0];
+        if (sample && typeof sample === 'object') {
+            for (var key in sample) {
+                if (!Object.prototype.hasOwnProperty.call(sample, key)) {
+                    continue;
+                }
+                var value = sample[key];
+                if (typeof value === 'string' && delimiter && value.indexOf(delimiter) !== -1) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    function rebuildFromArrayRows(raw, delimiter) {
+        if (!raw || !Array.isArray(raw.data) || raw.data.length < 1) {
+            return null;
+        }
+        var headerRow = raw.data[0];
+        var headerCells;
+        if (Array.isArray(headerRow) && headerRow.length > 1) {
+            headerCells = headerRow;
+        } else {
+            var headerValue = Array.isArray(headerRow) && headerRow.length ? headerRow[0] : headerRow;
+            headerCells = expandRowCells(headerValue, delimiter);
+        }
+        if (!headerCells || headerCells.length <= 1) {
+            return null;
+        }
+        var headers = [];
+        for (var i = 0; i < headerCells.length; i += 1) {
+            var headerText = headerCells[i];
+            headers.push(headerText == null ? '' : String(headerText).trim());
+        }
+        var rows = [];
+        for (var r = 1; r < raw.data.length; r += 1) {
+            var sourceRow = raw.data[r];
+            var expanded = Array.isArray(sourceRow) && sourceRow.length > 1
+                ? sourceRow
+                : expandRowCells(sourceRow, delimiter);
+            if (!expanded) {
+                continue;
+            }
+            var reconstructed = {};
+            for (var c = 0; c < headers.length; c += 1) {
+                var columnName = headers[c];
+                if (!columnName) {
+                    continue;
+                }
+                var cell = expanded[c];
+                if (cell == null) {
+                    reconstructed[columnName] = '';
+                } else if (typeof cell === 'string') {
+                    reconstructed[columnName] = cell.trim();
+                } else {
+                    reconstructed[columnName] = cell;
+                }
+            }
+            rows.push(reconstructed);
+        }
+        return { data: rows, meta: { fields: headers } };
+    }
+
+    function expandRowCells(row, delimiter) {
+        if (row == null) {
+            return null;
+        }
+        if (Array.isArray(row)) {
+            if (!row.length) {
+                return null;
+            }
+            if (row.length === 1) {
+                return expandRowCells(row[0], delimiter);
+            }
+            return row;
+        }
+        var text = String(row);
+        if (!text) {
+            return [''];
+        }
+        var trimmed = text.trim();
+        if (trimmed.length > 1 && trimmed.charAt(0) === '"' && trimmed.charAt(trimmed.length - 1) === '"') {
+            trimmed = trimmed.slice(1, trimmed.length - 1);
+        }
+        var parsed = parseCsv(trimmed, { delimiter: delimiter || ';', header: false, skipEmptyLines: false });
+        if (parsed && Array.isArray(parsed.data) && parsed.data.length) {
+            return parsed.data[0];
+        }
+        return [trimmed];
     }
 
     function detectDelimiter(text) {

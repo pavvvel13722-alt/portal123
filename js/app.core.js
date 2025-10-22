@@ -288,18 +288,33 @@
 
     function decodeBuffer(buffer) {
         const view = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+        const hasUtf8Bom = view.length >= 3 && view[0] === 0xef && view[1] === 0xbb && view[2] === 0xbf;
+        if (hasUtf8Bom) {
+            try {
+                const strictUtf8 = new TextDecoder('utf-8', { fatal: true });
+                return strictUtf8.decode(view);
+            } catch (err) {
+                try {
+                    const relaxedUtf8 = new TextDecoder('utf-8');
+                    return relaxedUtf8.decode(view);
+                } catch (errorUtf8) {
+                    console.warn('Не удалось декодировать UTF-8 BOM', errorUtf8);
+                    return '';
+                }
+            }
+        }
         const candidates = [];
         let utf8WasValid = false;
         try {
             const strictUtf8 = new TextDecoder('utf-8', { fatal: true });
             const text = strictUtf8.decode(view);
             utf8WasValid = true;
-            candidates.push({ encoding: 'utf-8', text, score: Shared.scoreDecodedText(text) + 500 });
+            candidates.push({ encoding: 'utf-8', text: text, score: Shared.scoreDecodedText(text) + 500 });
         } catch (err) {
             try {
                 const relaxedUtf8 = new TextDecoder('utf-8');
                 const text = relaxedUtf8.decode(view);
-                candidates.push({ encoding: 'utf-8', text, score: Shared.scoreDecodedText(text) });
+                candidates.push({ encoding: 'utf-8', text: text, score: Shared.scoreDecodedText(text) + 200 });
             } catch (errorUtf8) {
                 console.warn('Не удалось декодировать как UTF-8', errorUtf8);
             }
@@ -307,8 +322,8 @@
         try {
             const winDecoder = new TextDecoder('windows-1251');
             const winText = winDecoder.decode(view);
-            const bonus = utf8WasValid ? -10000 : 0;
-            candidates.push({ encoding: 'windows-1251', text: winText, score: Shared.scoreDecodedText(winText) + bonus });
+            const penalty = utf8WasValid ? -10000 : -1000;
+            candidates.push({ encoding: 'windows-1251', text: winText, score: Shared.scoreDecodedText(winText) + penalty });
         } catch (err) {
             console.warn('Не удалось декодировать как Windows-1251', err);
         }

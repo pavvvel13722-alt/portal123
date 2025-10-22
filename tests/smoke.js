@@ -94,5 +94,18 @@ if (!nonEmptyTemplate) {
     throw new Error('Tag extraction returned no tags');
 }
 
+const malformedCsv = '\\uFEFFID;Название;Описание\n1;"Тест";"Первая строка без закрытия"\n2;"Вторая";"Запись"\n';
+const parsedMalformed = CoreShared.autoParseCsv(malformedCsv);
+if (!parsedMalformed.meta || !parsedMalformed.meta.fields || parsedMalformed.meta.fields.length < 3) {
+    throw new Error('Malformed CSV headers collapsed');
+}
+if (parsedMalformed.data.length !== 2) {
+    throw new Error('Malformed CSV row count mismatch');
+}
+const reconstructed = CoreShared.normalizeRow(parsedMalformed.data[0], parsedMalformed.meta.fields);
+if (!reconstructed.title || reconstructed.title.indexOf('Тест') === -1) {
+    throw new Error('Malformed CSV normalization failed to recover title');
+}
+
 console.log('Duplicate clusters:', duplicateResult.clusters.length);
 console.log('Template with tags:', nonEmptyTemplate.template, 'tags', nonEmptyTemplate.tags.length);

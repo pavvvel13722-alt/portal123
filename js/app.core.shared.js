@@ -157,6 +157,23 @@
             return false;
         }
 
+        function hasClosingQuote(source, startIndex) {
+            for (var i = startIndex; i < source.length; i += 1) {
+                var ch = source.charAt(i);
+                if (ch === '"') {
+                    if (source.charAt(i + 1) === '"') {
+                        i += 1;
+                        continue;
+                    }
+                    return true;
+                }
+                if (ch === '\n' || ch === '\r') {
+                    return false;
+                }
+            }
+            return false;
+        }
+
         function pushField() {
             row.push(field);
             field = '';
@@ -185,14 +202,17 @@
                     inQuotes = false;
                     continue;
                 }
-                if (field.length === 0) {
-                    inQuotes = true;
-                    continue;
-                }
-                if (fieldOnlyWhitespace) {
-                    field = '';
-                    fieldOnlyWhitespace = true;
-                    inQuotes = true;
+                if (field.length === 0 || fieldOnlyWhitespace) {
+                    if (hasClosingQuote(input, index + 1)) {
+                        inQuotes = true;
+                        if (fieldOnlyWhitespace) {
+                            field = '';
+                            fieldOnlyWhitespace = true;
+                        }
+                        continue;
+                    }
+                    field += '"';
+                    fieldOnlyWhitespace = false;
                     continue;
                 }
             }

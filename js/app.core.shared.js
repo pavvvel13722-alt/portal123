@@ -441,6 +441,55 @@
                 };
             }
         }
+        var originalFields = best && best.meta && Array.isArray(best.meta.fields) ? best.meta.fields : [];
+        var normalizedFields = [];
+        for (var fieldIndex = 0; fieldIndex < originalFields.length; fieldIndex += 1) {
+            var headerValue = originalFields[fieldIndex];
+            if (headerValue == null) {
+                normalizedFields.push('');
+            } else {
+                normalizedFields.push(String(headerValue).trim());
+            }
+        }
+        var rawData = best && Array.isArray(best.data) ? best.data : [];
+        var sanitizedData = [];
+        for (var dataIndex = 0; dataIndex < rawData.length; dataIndex += 1) {
+            var row = rawData[dataIndex];
+            if (row && typeof row === 'object' && !Array.isArray(row)) {
+                sanitizedData.push(row);
+                continue;
+            }
+            if (Array.isArray(row)) {
+                var reconstructed = {};
+                for (var columnIndex = 0; columnIndex < normalizedFields.length; columnIndex += 1) {
+                    var headerName = normalizedFields[columnIndex];
+                    if (!headerName) {
+                        continue;
+                    }
+                    var cellValue = row[columnIndex];
+                    if (cellValue == null) {
+                        reconstructed[headerName] = '';
+                    } else if (typeof cellValue === 'string') {
+                        reconstructed[headerName] = cellValue.trim();
+                    } else {
+                        reconstructed[headerName] = cellValue;
+                    }
+                }
+                sanitizedData.push(reconstructed);
+                continue;
+            }
+            var fallbackRow = {};
+            if (normalizedFields.length === 1) {
+                var singleHeader = normalizedFields[0];
+                fallbackRow[singleHeader] = row == null ? '' : (typeof row === 'string' ? String(row).trim() : row);
+            }
+            sanitizedData.push(fallbackRow);
+        }
+        if (!best.meta) {
+            best.meta = { fields: [] };
+        }
+        best.meta.fields = normalizedFields;
+        best.data = sanitizedData;
         return best;
     }
 
@@ -634,6 +683,7 @@
         if (!columnList.length && row && typeof row === 'object') {
             columnList = Object.keys(row);
         }
+        var isArrayRow = Array.isArray(row);
         for (var i = 0; i < columnList.length; i += 1) {
             var column = columnList[i];
             var canonical = normalizeHeaderKey(column);
@@ -641,11 +691,16 @@
             var key = mapCanonicalHeader(canonical);
             if (!key || seenKeys[key]) continue;
             seenKeys[key] = true;
-            var rawValue = row[column];
+            var rawValue;
+            if (isArrayRow) {
+                rawValue = row[i];
+            } else {
+                rawValue = row[column];
+            }
             var cleaned = typeof rawValue === 'string' ? rawValue.trim() : rawValue;
             normalized[key] = cleaned != null ? cleaned : '';
         }
-        if (row && typeof row === 'object') {
+        if (row && typeof row === 'object' && !isArrayRow) {
             for (var originalKey in row) {
                 if (!Object.prototype.hasOwnProperty.call(row, originalKey)) continue;
                 var mapped = normalizeHeaderKey(originalKey);

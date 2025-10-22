@@ -224,7 +224,7 @@
             return;
         }
         const fragment = document.createDocumentFragment();
-        clusters.forEach((cluster) => {
+        clusters.forEach(function (cluster, clusterIndex) {
             const wrapper = document.createElement('div');
             wrapper.className = 'cluster';
             const header = document.createElement('div');
@@ -232,7 +232,13 @@
             const title = document.createElement('h3');
             title.className = 'cluster__title';
             const clusterAuthor = cluster.author ? cluster.author : 'Неизвестная группа';
+            const duplicatesCount = cluster.duplicates && cluster.duplicates.length
+                ? cluster.duplicates.length
+                : Math.max(cluster.members.length - 1, 0);
             title.textContent = clusterAuthor + ' - ' + cluster.members.length + ' обращений';
+            const counter = document.createElement('div');
+            counter.className = 'cluster__counter';
+            counter.textContent = 'Дублей к закрытию: ' + duplicatesCount;
             const stats = document.createElement('div');
             stats.className = 'cluster__stats';
             const statsParts = [];
@@ -253,6 +259,7 @@
             }
             stats.textContent = statsParts.join(' | ');
             header.appendChild(title);
+            header.appendChild(counter);
             header.appendChild(stats);
             wrapper.appendChild(header);
 
@@ -264,6 +271,8 @@
             row.className = 'record';
             if (record.isPrimary) row.classList.add('record--primary');
             else row.classList.add('record--duplicate');
+            row.dataset.clusterIndex = String(clusterIndex);
+            row.dataset.recordId = record.id ? record.id : '';
 
             const fieldId = document.createElement('div');
             fieldId.className = 'record__field record__id';
@@ -348,6 +357,14 @@
             copyButton.textContent = 'Текст закрытия';
             if (record.isPrimary) copyButton.disabled = true;
             actions.appendChild(copyButton);
+            if (!record.isPrimary) {
+                const removeButton = document.createElement('button');
+                removeButton.dataset.action = 'remove';
+                removeButton.dataset.id = recordId;
+                removeButton.dataset.cluster = String(clusterIndex);
+                removeButton.textContent = 'X Не дубль';
+                actions.appendChild(removeButton);
+            }
             row.appendChild(actions);
 
             list.appendChild(row);
@@ -383,6 +400,35 @@
                 alert('Не удалось скопировать текст. Скопируйте вручную:\n' + text);
             });
         }
+        if (action === 'remove') {
+            const clusterIndex = button.dataset.cluster;
+            removeDuplicateFromCluster(clusterIndex, id);
+        }
+    }
+
+    function removeDuplicateFromCluster(clusterIndex, recordId) {
+        const index = Number(clusterIndex);
+        if (!Number.isFinite(index) || index < 0) return;
+        if (!currentClusters || !currentClusters.length) return;
+        const cluster = currentClusters[index];
+        if (!cluster || !Array.isArray(cluster.duplicates)) return;
+        const updatedDuplicates = [];
+        let removed = false;
+        for (let i = 0; i < cluster.duplicates.length; i += 1) {
+            const dup = cluster.duplicates[i];
+            if (!removed && dup && dup.id === recordId) {
+                removed = true;
+                continue;
+            }
+            updatedDuplicates.push(dup);
+        }
+        if (!removed) return;
+        cluster.duplicates = updatedDuplicates;
+        cluster.members = [cluster.primary].concat(updatedDuplicates);
+        if (!cluster.duplicates.length) {
+            currentClusters.splice(index, 1);
+        }
+        renderClusters(currentClusters, lastAnalysisMeta);
     }
 
     function buildDuplicateEngine() {

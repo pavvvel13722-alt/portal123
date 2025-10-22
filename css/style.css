@@ -329,6 +329,12 @@ input[type="file"] {
     font-size: 1.15rem;
 }
 
+.cluster__counter {
+    font-weight: 600;
+    color: var(--accent);
+    white-space: nowrap;
+}
+
 .cluster__stats {
     color: var(--fg-soft);
     font-size: 0.9rem;

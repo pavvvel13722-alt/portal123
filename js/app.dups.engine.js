@@ -411,11 +411,11 @@
                     }
         
                     function selectPrimary(records) {
-                        return records.slice().sort((a, b) => {
-                            const timeA = a.createdTime != null ? a.createdTime : Number.POSITIVE_INFINITY;
-                            const timeB = b.createdTime != null ? b.createdTime : Number.POSITIVE_INFINITY;
-                            if (timeA !== timeB) return timeA - timeB;
-                            return a.index - b.index;
+                        return records.slice().sort(function (a, b) {
+                            const timeA = a.createdTime != null ? a.createdTime : Number.NEGATIVE_INFINITY;
+                            const timeB = b.createdTime != null ? b.createdTime : Number.NEGATIVE_INFINITY;
+                            if (timeA !== timeB) return timeB - timeA;
+                            return b.index - a.index;
                         })[0];
                     }
         

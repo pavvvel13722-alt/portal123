@@ -5,27 +5,33 @@
     let currentClusters = [];
     let lastAnalysisMeta = null;
     let settingsContainer = null;
+    let resultsContainer = null;
     const DuplicateEngine = buildDuplicateEngine();
     let pendingJob = null;
+    const settingsControls = {
+        threshold: null,
+        smartToggle: null,
+        timeGuardToggle: null,
+        timeGuardDays: null,
+        stopPhrases: null
+    };
+    const settingsHints = {
+        smart: null,
+        threshold: null,
+        guard: null
+    };
+    let resultsListenerAttached = false;
 
     document.addEventListener('app:ready', ({ detail }) => {
         settingsContainer = document.getElementById('duplicate-settings');
-        AppCore.mountSettings(
-            settingsContainer,
-            [
-                { key: 'smartThreshold', label: 'Умный порог по длине', type: 'checkbox', defaultValue: true },
-                { key: 'thresholdShort', label: 'Порог для коротких описаний (<8 токенов)', type: 'number', step: 0.01, min: 0, max: 1 },
-                { key: 'thresholdMedium', label: 'Порог для средних описаний (8-19 токенов)', type: 'number', step: 0.01, min: 0, max: 1 },
-                { key: 'thresholdLong', label: 'Порог для длинных описаний (>=20 токенов)', type: 'number', step: 0.01, min: 0, max: 1 },
-                { key: 'baseThreshold', label: 'Порог без умной логики', type: 'number', step: 0.01, min: 0, max: 1 },
-                { key: 'timeGuardEnabled', label: 'Учитывать интервал +/- дней', type: 'checkbox', defaultValue: true },
-                { key: 'timeGuardDays', label: 'Интервал по дате (дни)', type: 'number', step: 1, min: 0, max: 60 },
-                { key: 'stopPhrases', label: 'Стоп-фразы в описании (по одной в строке)', type: 'textarea' }
-            ],
-            'duplicates'
-        );
+        buildSettingsUI();
         syncSettingsState();
         setupWorker();
+        resultsContainer = document.getElementById('duplicate-results');
+        if (resultsContainer && !resultsListenerAttached) {
+            resultsContainer.addEventListener('click', handleActionClick);
+            resultsListenerAttached = true;
+        }
     });
 
     document.addEventListener('app:settings-update', ({ detail }) => {
@@ -202,191 +208,364 @@
 
     function syncSettingsState() {
         if (!settingsContainer) return;
-        const smartToggle = settingsContainer.querySelector('[data-setting-key="smartThreshold"]');
-        const smartDependent = settingsContainer.querySelectorAll('[data-setting-key="thresholdShort"], [data-setting-key="thresholdMedium"], [data-setting-key="thresholdLong"]');
-        const guardToggle = settingsContainer.querySelector('[data-setting-key="timeGuardEnabled"]');
-        const guardField = settingsContainer.querySelector('[data-setting-key="timeGuardDays"]');
-        const smartOn = smartToggle ? smartToggle.checked : Boolean(AppCore.getSettingValue('duplicates', 'smartThreshold'));
-        smartDependent.forEach((input) => {
-            input.disabled = !smartOn;
-        });
-        if (guardField) {
-            const guardOn = guardToggle ? guardToggle.checked : Boolean(AppCore.getSettingValue('duplicates', 'timeGuardEnabled'));
-            guardField.disabled = !guardOn;
+        const settings = AppCore.getSettings().duplicates || {};
+        if (settingsControls.threshold) {
+            let percent = Number(settings.baseThreshold) * 100;
+            if (!Number.isFinite(percent)) percent = 62;
+            percent = Math.round(percent);
+            if (percent < 0) percent = 0;
+            if (percent > 100) percent = 100;
+            settingsControls.threshold.value = String(percent);
+            if (settingsHints.threshold) {
+                settingsHints.threshold.textContent = 'Используется, когда авто режим отключен. Текущий порог: ' + percent + '%.';
+            }
         }
+        if (settingsControls.smartToggle) {
+            settingsControls.smartToggle.checked = Boolean(settings.smartThreshold);
+            if (settingsHints.smart) {
+                const short = settings.thresholdShort != null ? Math.round(settings.thresholdShort * 100) : 0;
+                const medium = settings.thresholdMedium != null ? Math.round(settings.thresholdMedium * 100) : 0;
+                const long = settings.thresholdLong != null ? Math.round(settings.thresholdLong * 100) : 0;
+                settingsHints.smart.textContent = 'Автонастройка: короткие >= ' + short + '%, средние >= ' + medium + '%, длинные >= ' + long + '%.';
+            }
+        }
+        if (settingsControls.timeGuardToggle) {
+            const enabled = settings.timeGuardEnabled !== undefined ? Boolean(settings.timeGuardEnabled) : true;
+            settingsControls.timeGuardToggle.checked = enabled;
+            if (settingsControls.timeGuardDays) {
+                let daysValue = settings.timeGuardDays != null ? Number(settings.timeGuardDays) : 14;
+                if (!Number.isFinite(daysValue)) daysValue = 0;
+                if (daysValue < 0) daysValue = 0;
+                if (daysValue > 60) daysValue = 60;
+                settingsControls.timeGuardDays.disabled = !enabled;
+                settingsControls.timeGuardDays.value = String(daysValue);
+                if (settingsHints.guard) {
+                    settingsHints.guard.textContent = enabled
+                        ? 'Будут сравниваться обращения в пределах ' + daysValue + ' дней от даты создания.'
+                        : 'Фильтр по дате отключен.';
+                }
+            }
+        }
+        if (settingsControls.stopPhrases) {
+            settingsControls.stopPhrases.value = settings.stopPhrases != null ? String(settings.stopPhrases) : '';
+        }
+    }
+
+    function buildSettingsUI() {
+        if (!settingsContainer) return;
+        settingsControls.threshold = null;
+        settingsControls.smartToggle = null;
+        settingsControls.timeGuardToggle = null;
+        settingsControls.timeGuardDays = null;
+        settingsControls.stopPhrases = null;
+        settingsHints.smart = null;
+        settingsHints.threshold = null;
+        settingsHints.guard = null;
+        settingsContainer.innerHTML = '';
+
+        const thresholdCard = document.createElement('div');
+        thresholdCard.className = 'setting';
+        const thresholdLabel = document.createElement('label');
+        thresholdLabel.textContent = 'Минимальная похожесть, %';
+        thresholdCard.appendChild(thresholdLabel);
+        const thresholdInput = document.createElement('input');
+        thresholdInput.type = 'number';
+        thresholdInput.min = '0';
+        thresholdInput.max = '100';
+        thresholdInput.step = '1';
+        thresholdInput.addEventListener('change', function (event) {
+            let value = Number(event.target.value);
+            if (!Number.isFinite(value)) value = 62;
+            if (value < 0) value = 0;
+            if (value > 100) value = 100;
+            event.target.value = String(Math.round(value));
+            AppCore.updateSetting('duplicates', 'baseThreshold', value / 100);
+        });
+        thresholdCard.appendChild(thresholdInput);
+        const thresholdHint = document.createElement('p');
+        thresholdHint.className = 'setting__hint';
+        thresholdCard.appendChild(thresholdHint);
+        settingsControls.threshold = thresholdInput;
+        settingsHints.threshold = thresholdHint;
+        settingsContainer.appendChild(thresholdCard);
+
+        const smartCard = document.createElement('div');
+        smartCard.className = 'setting';
+        const smartLabel = document.createElement('label');
+        smartLabel.className = 'setting__checkbox-label';
+        const smartInput = document.createElement('input');
+        smartInput.type = 'checkbox';
+        smartInput.addEventListener('change', function (event) {
+            AppCore.updateSetting('duplicates', 'smartThreshold', event.target.checked);
+        });
+        smartLabel.appendChild(smartInput);
+        const smartText = document.createElement('span');
+        smartText.textContent = 'Автонастройка порога по длине описания';
+        smartLabel.appendChild(smartText);
+        smartCard.appendChild(smartLabel);
+        const smartHint = document.createElement('p');
+        smartHint.className = 'setting__hint';
+        smartCard.appendChild(smartHint);
+        settingsControls.smartToggle = smartInput;
+        settingsHints.smart = smartHint;
+        settingsContainer.appendChild(smartCard);
+
+        const guardCard = document.createElement('div');
+        guardCard.className = 'setting';
+        const guardToggleLabel = document.createElement('label');
+        guardToggleLabel.className = 'setting__checkbox-label';
+        const guardToggle = document.createElement('input');
+        guardToggle.type = 'checkbox';
+        guardToggle.addEventListener('change', function (event) {
+            AppCore.updateSetting('duplicates', 'timeGuardEnabled', event.target.checked);
+        });
+        guardToggleLabel.appendChild(guardToggle);
+        const guardText = document.createElement('span');
+        guardText.textContent = 'Сравнивать обращения, созданные близко по времени';
+        guardToggleLabel.appendChild(guardText);
+        guardCard.appendChild(guardToggleLabel);
+        const guardInline = document.createElement('div');
+        guardInline.className = 'setting__inline';
+        const guardInlineLabel = document.createElement('span');
+        guardInlineLabel.textContent = 'Интервал, дней';
+        guardInline.appendChild(guardInlineLabel);
+        const guardDays = document.createElement('input');
+        guardDays.type = 'number';
+        guardDays.min = '0';
+        guardDays.max = '60';
+        guardDays.step = '1';
+        guardDays.addEventListener('change', function (event) {
+            let value = Number(event.target.value);
+            if (!Number.isFinite(value)) value = 0;
+            if (value < 0) value = 0;
+            if (value > 60) value = 60;
+            event.target.value = String(Math.round(value));
+            AppCore.updateSetting('duplicates', 'timeGuardDays', value);
+        });
+        guardInline.appendChild(guardDays);
+        guardCard.appendChild(guardInline);
+        const guardHint = document.createElement('p');
+        guardHint.className = 'setting__hint';
+        guardCard.appendChild(guardHint);
+        settingsControls.timeGuardToggle = guardToggle;
+        settingsControls.timeGuardDays = guardDays;
+        settingsHints.guard = guardHint;
+        settingsContainer.appendChild(guardCard);
+
+        const stopCard = document.createElement('div');
+        stopCard.className = 'setting setting--stretch';
+        const stopLabel = document.createElement('label');
+        stopLabel.textContent = 'Стоп-фразы (каждая с новой строки)';
+        stopCard.appendChild(stopLabel);
+        const stopArea = document.createElement('textarea');
+        stopArea.addEventListener('change', function (event) {
+            AppCore.updateSetting('duplicates', 'stopPhrases', event.target.value);
+        });
+        stopCard.appendChild(stopArea);
+        settingsControls.stopPhrases = stopArea;
+        settingsContainer.appendChild(stopCard);
     }
 
     function renderClusters(clusters, meta) {
         const container = document.getElementById('duplicate-results');
-        document.getElementById('btn-export-duplicates').disabled = !clusters.length;
+        const exportButton = document.getElementById('btn-export-duplicates');
+        if (exportButton) {
+            exportButton.disabled = !clusters.length;
+        }
+        if (!container) return;
         if (!clusters.length) {
             container.innerHTML = '<div class="empty-state">Загрузите файл и запустите анализ, чтобы увидеть кластеры дублей.</div>';
             return;
         }
         const fragment = document.createDocumentFragment();
+        const totalDuplicates = clusters.reduce(function (sum, cluster) {
+            const base = cluster && Array.isArray(cluster.members) ? cluster.members.length : 0;
+            const duplicates = cluster && Array.isArray(cluster.duplicates) && cluster.duplicates.length
+                ? cluster.duplicates.length
+                : Math.max(base - 1, 0);
+            return sum + duplicates;
+        }, 0);
+        const summary = document.createElement('div');
+        summary.className = 'duplicates-summary';
+        const summaryTotal = document.createElement('strong');
+        summaryTotal.className = 'duplicates-summary__total';
+        summaryTotal.textContent = 'Всего дублей к закрытию: ' + totalDuplicates;
+        summary.appendChild(summaryTotal);
+        const summaryGroups = document.createElement('span');
+        summaryGroups.textContent = 'Групп: ' + clusters.length;
+        summary.appendChild(summaryGroups);
+        fragment.appendChild(summary);
+
         clusters.forEach(function (cluster, clusterIndex) {
             const wrapper = document.createElement('div');
             wrapper.className = 'cluster';
             const header = document.createElement('div');
             header.className = 'cluster__header';
+            const headerTop = document.createElement('div');
+            headerTop.className = 'cluster__top';
             const title = document.createElement('h3');
             title.className = 'cluster__title';
             const clusterAuthor = cluster.author ? cluster.author : 'Неизвестная группа';
-            const duplicatesCount = cluster.duplicates && cluster.duplicates.length
-                ? cluster.duplicates.length
-                : Math.max(cluster.members.length - 1, 0);
-            title.textContent = clusterAuthor + ' - ' + cluster.members.length + ' обращений';
-            const counter = document.createElement('div');
-            counter.className = 'cluster__counter';
-            counter.textContent = 'Дублей к закрытию: ' + duplicatesCount;
+            const memberCount = cluster.members && cluster.members.length ? cluster.members.length : 0;
+            title.textContent = clusterAuthor + ' - ' + memberCount + ' обращений';
+            headerTop.appendChild(title);
+            const dismissButton = document.createElement('button');
+            dismissButton.type = 'button';
+            dismissButton.className = 'cluster__dismiss';
+            dismissButton.dataset.action = 'dismiss-cluster';
+            dismissButton.dataset.cluster = String(clusterIndex);
+            dismissButton.textContent = 'X Удалить группу';
+            headerTop.appendChild(dismissButton);
+            header.appendChild(headerTop);
+
             const stats = document.createElement('div');
             stats.className = 'cluster__stats';
             const statsParts = [];
             const thresholds = meta && meta.thresholds ? meta.thresholds : {};
             if (meta && meta.smartThreshold) {
-                const short = thresholds.short != null ? (thresholds.short * 100).toFixed(0) : '-';
-                const medium = thresholds.medium != null ? (thresholds.medium * 100).toFixed(0) : '-';
-                const long = thresholds.long != null ? (thresholds.long * 100).toFixed(0) : '-';
-                statsParts.push('Умный порог: <8 -> ' + short + '%, 8-19 -> ' + medium + '%, >=20 -> ' + long + '%');
+                const short = thresholds.short != null ? Math.round(thresholds.short * 100) : null;
+                const medium = thresholds.medium != null ? Math.round(thresholds.medium * 100) : null;
+                const long = thresholds.long != null ? Math.round(thresholds.long * 100) : null;
+                const shortText = short != null ? short + '%' : '-';
+                const mediumText = medium != null ? medium + '%' : '-';
+                const longText = long != null ? long + '%' : '-';
+                statsParts.push('Автонастройка: короткие >= ' + shortText + ', средние >= ' + mediumText + ', длинные >= ' + longText);
             } else if (thresholds.base != null) {
-                statsParts.push('Порог: ' + (thresholds.base * 100).toFixed(0) + '%');
+                const basePercent = Math.round(thresholds.base * 100);
+                statsParts.push('Порог похожести: ' + basePercent + '%');
             }
             if (meta && meta.timeGuard && meta.timeGuard.enabled) {
-                statsParts.push('Интервал +/-' + meta.timeGuard.days + ' д.');
+                statsParts.push('Окно по дате +/-' + meta.timeGuard.days + ' д.');
             }
             if (!statsParts.length) {
-                statsParts.push('Параметры порога недоступны');
+                statsParts.push('Информация о порогах недоступна');
             }
             stats.textContent = statsParts.join(' | ');
-            header.appendChild(title);
-            header.appendChild(counter);
             header.appendChild(stats);
             wrapper.appendChild(header);
 
-        const list = document.createElement('div');
-        list.className = 'record-list';
-        const masterId = cluster.primary && cluster.primary.id ? cluster.primary.id : '';
-        cluster.members.forEach(function (record) {
-            const row = document.createElement('div');
-            row.className = 'record';
-            if (record.isPrimary) row.classList.add('record--primary');
-            else row.classList.add('record--duplicate');
-            row.dataset.clusterIndex = String(clusterIndex);
-            row.dataset.recordId = record.id ? record.id : '';
+            const list = document.createElement('div');
+            list.className = 'record-list';
+            const masterId = cluster.primary && cluster.primary.id ? cluster.primary.id : '';
+            cluster.members.forEach(function (record) {
+                const row = document.createElement('div');
+                row.className = 'record';
+                if (record.isPrimary) row.classList.add('record--primary');
+                else row.classList.add('record--duplicate');
+                row.dataset.clusterIndex = String(clusterIndex);
+                row.dataset.recordId = record.id ? record.id : '';
 
-            const fieldId = document.createElement('div');
-            fieldId.className = 'record__field record__id';
-            const titleWrap = document.createElement('div');
-            titleWrap.className = 'record__title';
-            const badge = document.createElement('span');
-            badge.className = 'record__badge';
-            badge.textContent = record.isPrimary ? 'Осн.' : 'Дубль';
-            titleWrap.appendChild(badge);
-            const link = document.createElement('a');
-            const recordId = record.id ? record.id : '';
-            const linkUrl = 'https://sfera.vtb.ru/sd/support?open=' + encodeURIComponent(recordId);
-            link.href = linkUrl;
-            link.target = '_blank';
-            link.rel = 'noopener noreferrer';
-            link.textContent = recordId || '-';
-            titleWrap.appendChild(link);
-            fieldId.appendChild(titleWrap);
-            const snippet = document.createElement('div');
-            snippet.className = 'record__snippet';
-            snippet.innerHTML = record.snippet ? record.snippet : '<span class="record__meta">Нет описания</span>';
-            fieldId.appendChild(snippet);
-            row.appendChild(fieldId);
+                const fieldId = document.createElement('div');
+                fieldId.className = 'record__field record__id';
+                const titleWrap = document.createElement('div');
+                titleWrap.className = 'record__title';
+                const badge = document.createElement('span');
+                badge.className = 'record__badge';
+                badge.textContent = record.isPrimary ? 'Осн.' : 'Дубль';
+                titleWrap.appendChild(badge);
+                const link = document.createElement('a');
+                const recordId = record.id ? record.id : '';
+                const linkUrl = 'https://sfera.vtb.ru/sd/support?open=' + encodeURIComponent(recordId);
+                link.href = linkUrl;
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+                link.textContent = recordId || '-';
+                titleWrap.appendChild(link);
+                fieldId.appendChild(titleWrap);
+                const snippet = document.createElement('div');
+                snippet.className = 'record__snippet';
+                snippet.innerHTML = record.snippet ? record.snippet : '<span class="record__meta">Нет описания</span>';
+                fieldId.appendChild(snippet);
+                row.appendChild(fieldId);
 
-            const fieldAuthor = document.createElement('div');
-            fieldAuthor.className = 'record__field';
-            const authorSpan = document.createElement('span');
-            authorSpan.textContent = record.author || '-';
-            fieldAuthor.appendChild(authorSpan);
-            const role = document.createElement('span');
-            role.className = 'record__meta';
-            role.textContent = record.isPrimary ? 'Основное обращение' : 'Дубль основного';
-            fieldAuthor.appendChild(role);
-            row.appendChild(fieldAuthor);
+                const fieldAuthor = document.createElement('div');
+                fieldAuthor.className = 'record__field';
+                const authorSpan = document.createElement('span');
+                authorSpan.textContent = record.author || '-';
+                fieldAuthor.appendChild(authorSpan);
+                const role = document.createElement('span');
+                role.className = 'record__meta';
+                role.textContent = record.isPrimary ? 'Основное обращение' : 'Дубль основного';
+                fieldAuthor.appendChild(role);
+                row.appendChild(fieldAuthor);
 
-            const fieldPriority = document.createElement('div');
-            fieldPriority.className = 'record__field';
-            const prioritySpan = document.createElement('span');
-            prioritySpan.textContent = record.priority || '-';
-            fieldPriority.appendChild(prioritySpan);
-            const slaSpan = document.createElement('span');
-            slaSpan.className = 'record__meta';
-            slaSpan.textContent = record.sla ? 'SLA: ' + record.sla : '';
-            fieldPriority.appendChild(slaSpan);
-            row.appendChild(fieldPriority);
+                const fieldPriority = document.createElement('div');
+                fieldPriority.className = 'record__field';
+                const prioritySpan = document.createElement('span');
+                prioritySpan.textContent = record.priority || '-';
+                fieldPriority.appendChild(prioritySpan);
+                const slaSpan = document.createElement('span');
+                slaSpan.className = 'record__meta';
+                slaSpan.textContent = record.sla ? 'SLA: ' + record.sla : '';
+                fieldPriority.appendChild(slaSpan);
+                row.appendChild(fieldPriority);
 
-            const fieldDate = document.createElement('div');
-            fieldDate.className = 'record__field';
-            const dateSpan = document.createElement('span');
-            dateSpan.textContent = record.createdAt || '-';
-            fieldDate.appendChild(dateSpan);
-            const statusSpan = document.createElement('span');
-            statusSpan.className = 'record__meta';
-            statusSpan.textContent = record.status || '';
-            fieldDate.appendChild(statusSpan);
-            row.appendChild(fieldDate);
+                const fieldDate = document.createElement('div');
+                fieldDate.className = 'record__field';
+                const dateSpan = document.createElement('span');
+                dateSpan.textContent = record.createdAt || '-';
+                fieldDate.appendChild(dateSpan);
+                const statusSpan = document.createElement('span');
+                statusSpan.className = 'record__meta';
+                statusSpan.textContent = record.status || '';
+                fieldDate.appendChild(statusSpan);
+                row.appendChild(fieldDate);
 
-            const fieldSimilarity = document.createElement('div');
-            fieldSimilarity.className = 'record__field';
-            const similaritySpan = document.createElement('span');
-            if (record.similarity) similaritySpan.textContent = record.similarity;
-            else if (record.isPrimary) similaritySpan.textContent = '-';
-            else similaritySpan.textContent = '0%';
-            fieldSimilarity.appendChild(similaritySpan);
-            const similarityMeta = document.createElement('span');
-            similarityMeta.className = 'record__meta';
-            similarityMeta.textContent = record.similarityDetail || 'Порог: -';
-            fieldSimilarity.appendChild(similarityMeta);
-            row.appendChild(fieldSimilarity);
+                const fieldSimilarity = document.createElement('div');
+                fieldSimilarity.className = 'record__field';
+                const similaritySpan = document.createElement('span');
+                if (record.similarity) similaritySpan.textContent = record.similarity;
+                else if (record.isPrimary) similaritySpan.textContent = '-';
+                else similaritySpan.textContent = '0%';
+                fieldSimilarity.appendChild(similaritySpan);
+                const similarityMeta = document.createElement('span');
+                similarityMeta.className = 'record__meta';
+                similarityMeta.textContent = record.similarityDetail || 'Порог: -';
+                fieldSimilarity.appendChild(similarityMeta);
+                row.appendChild(fieldSimilarity);
 
-            const actions = document.createElement('div');
-            actions.className = 'record__actions';
-            const openButton = document.createElement('button');
-            openButton.dataset.action = 'open';
-            openButton.dataset.id = recordId;
-            openButton.textContent = 'Открыть';
-            actions.appendChild(openButton);
-            const copyButton = document.createElement('button');
-            copyButton.dataset.action = 'copy';
-            copyButton.dataset.id = recordId;
-            copyButton.dataset.primary = masterId;
-            copyButton.textContent = 'Текст закрытия';
-            if (record.isPrimary) copyButton.disabled = true;
-            actions.appendChild(copyButton);
-            if (!record.isPrimary) {
-                const removeButton = document.createElement('button');
-                removeButton.dataset.action = 'remove';
-                removeButton.dataset.id = recordId;
-                removeButton.dataset.cluster = String(clusterIndex);
-                removeButton.textContent = 'X Не дубль';
-                actions.appendChild(removeButton);
-            }
-            row.appendChild(actions);
+                const actions = document.createElement('div');
+                actions.className = 'record__actions';
+                const openButton = document.createElement('button');
+                openButton.dataset.action = 'open';
+                openButton.dataset.id = recordId;
+                openButton.textContent = 'Открыть';
+                actions.appendChild(openButton);
+                const copyButton = document.createElement('button');
+                copyButton.dataset.action = 'copy';
+                copyButton.dataset.id = recordId;
+                copyButton.dataset.primary = masterId;
+                copyButton.textContent = 'Текст закрытия';
+                if (record.isPrimary) copyButton.disabled = true;
+                actions.appendChild(copyButton);
+                row.appendChild(actions);
 
-            list.appendChild(row);
-        });
+                list.appendChild(row);
+            });
             wrapper.appendChild(list);
             fragment.appendChild(wrapper);
         });
         container.innerHTML = '';
         container.appendChild(fragment);
-        container.querySelectorAll('.record__actions button').forEach((button) => {
-            button.addEventListener('click', handleActionClick);
-        });
     }
 
     function handleActionClick(event) {
-        const button = event.currentTarget;
+        const target = event.target;
+        if (!target || typeof target.closest !== 'function') return;
+        const button = target.closest('button[data-action]');
+        if (!button) return;
         const action = button.dataset.action;
+        if (action === 'dismiss-cluster') {
+            const clusterIndex = button.dataset.cluster;
+            dismissCluster(clusterIndex);
+            return;
+        }
         const id = button.dataset.id;
         if (!id) return;
         if (action === 'open') {
             const url = 'https://sfera.vtb.ru/sd/support?open=' + encodeURIComponent(id);
             window.open(url, '_blank', 'noopener');
+            return;
         }
         if (action === 'copy') {
             const primaryId = button.dataset.primary || id;
@@ -400,34 +579,14 @@
                 alert('Не удалось скопировать текст. Скопируйте вручную:\n' + text);
             });
         }
-        if (action === 'remove') {
-            const clusterIndex = button.dataset.cluster;
-            removeDuplicateFromCluster(clusterIndex, id);
-        }
     }
 
-    function removeDuplicateFromCluster(clusterIndex, recordId) {
+    function dismissCluster(clusterIndex) {
         const index = Number(clusterIndex);
         if (!Number.isFinite(index) || index < 0) return;
         if (!currentClusters || !currentClusters.length) return;
-        const cluster = currentClusters[index];
-        if (!cluster || !Array.isArray(cluster.duplicates)) return;
-        const updatedDuplicates = [];
-        let removed = false;
-        for (let i = 0; i < cluster.duplicates.length; i += 1) {
-            const dup = cluster.duplicates[i];
-            if (!removed && dup && dup.id === recordId) {
-                removed = true;
-                continue;
-            }
-            updatedDuplicates.push(dup);
-        }
-        if (!removed) return;
-        cluster.duplicates = updatedDuplicates;
-        cluster.members = [cluster.primary].concat(updatedDuplicates);
-        if (!cluster.duplicates.length) {
-            currentClusters.splice(index, 1);
-        }
+        if (index >= currentClusters.length) return;
+        currentClusters.splice(index, 1);
         renderClusters(currentClusters, lastAnalysisMeta);
     }
 

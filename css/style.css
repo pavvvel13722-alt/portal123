@@ -208,7 +208,36 @@ input[type="file"] {
     min-width: 220px;
 }
 
+.setting--stretch {
+    flex: 1 1 320px;
+}
+
 .setting label {
+    font-size: 0.85rem;
+    color: var(--fg-soft);
+}
+
+.setting__checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.95rem;
+    color: var(--fg);
+}
+
+.setting__hint {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--fg-soft);
+}
+
+.setting__inline {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.setting__inline span {
     font-size: 0.85rem;
     color: var(--fg-soft);
 }
@@ -232,6 +261,26 @@ input[type="file"] {
 .modal__field textarea {
     min-height: 80px;
     resize: vertical;
+}
+
+.setting__inline input[type="number"] {
+    width: 90px;
+}
+
+.setting input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border-radius: 0.35rem;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+.setting input[type="checkbox"]:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.3);
 }
 
 .setting input:focus,
@@ -317,11 +366,30 @@ input[type="file"] {
     border-top: none;
 }
 
+.duplicates-summary {
+    margin-bottom: 1rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 0.9rem;
+    background: var(--surface-muted);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    font-weight: 600;
+}
+
+.duplicates-summary__total {
+    color: var(--fg);
+}
+
+.duplicates-summary span {
+    color: var(--fg-soft);
+}
+
 .cluster__header {
     display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 1rem;
+    flex-direction: column;
+    gap: 0.6rem;
 }
 
 .cluster__title {
@@ -329,15 +397,38 @@ input[type="file"] {
     font-size: 1.15rem;
 }
 
-.cluster__counter {
-    font-weight: 600;
-    color: var(--accent);
-    white-space: nowrap;
-}
-
 .cluster__stats {
     color: var(--fg-soft);
     font-size: 0.9rem;
+}
+
+.cluster__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.cluster__dismiss {
+    border-radius: 999px;
+    border: 1px solid var(--border-strong);
+    background: transparent;
+    color: var(--fg);
+    padding: 0.35rem 0.8rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.cluster__dismiss:hover {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: var(--danger);
+    color: var(--danger);
+}
+
+.cluster__dismiss:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.25);
 }
 
 .record-list {

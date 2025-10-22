@@ -242,7 +242,85 @@
         return { data: dataRows, meta: { fields: headers } };
     }
 
-    function scoreParseResult(parsed, delimiter) {
+    function scoreSemanticQuality(parsed) {
+        if (!parsed || !parsed.meta || !Array.isArray(parsed.meta.fields)) {
+            return 0;
+        }
+        var fields = parsed.meta.fields;
+        if (!fields.length) {
+            return 0;
+        }
+        var data = Array.isArray(parsed.data) ? parsed.data : [];
+        if (!data.length) {
+            return 0;
+        }
+        var columnKeys = [];
+        var seen = {};
+        for (var i = 0; i < fields.length; i += 1) {
+            var header = fields[i];
+            var canonical = normalizeHeaderKey(header);
+            var mapped = mapCanonicalHeader(canonical);
+            if (!mapped || seen[mapped]) {
+                columnKeys.push('');
+            } else {
+                columnKeys.push(mapped);
+                seen[mapped] = true;
+            }
+        }
+        var sampleSize = Math.min(data.length, 50);
+        if (!sampleSize) {
+            return 0;
+        }
+        var idHits = 0;
+        var titleHits = 0;
+        var descHits = 0;
+        var authorHits = 0;
+        for (var rowIndex = 0; rowIndex < sampleSize; rowIndex += 1) {
+            var row = data[rowIndex];
+            if (!row || typeof row !== 'object') {
+                continue;
+            }
+            var idValue = '';
+            var titleValue = '';
+            var descValue = '';
+            var authorValue = '';
+            for (var c = 0; c < columnKeys.length; c += 1) {
+                var key = columnKeys[c];
+                if (!key) {
+                    continue;
+                }
+                var originalHeader = fields[c];
+                var cell = row[originalHeader];
+                var value = typeof cell === 'string' ? cell.trim() : cell;
+                if (!value) {
+                    continue;
+                }
+                if (key === 'id' && !idValue) {
+                    idValue = value;
+                } else if (key === 'title' && !titleValue) {
+                    titleValue = value;
+                } else if (key === 'description' && !descValue) {
+                    descValue = value;
+                } else if (key === 'author' && !authorValue) {
+                    authorValue = value;
+                }
+            }
+            if (idValue) idHits += 1;
+            if (titleValue) titleHits += 1;
+            if (descValue) descHits += 1;
+            if (authorValue) authorHits += 1;
+        }
+        var coverage = (idHits + titleHits + descHits + authorHits) / (sampleSize * 4);
+        if (!isFinite(coverage) || coverage < 0) {
+            return 0;
+        }
+        if (coverage > 1) {
+            coverage = 1;
+        }
+        return coverage;
+    }
+
+    function scoreParseResult(parsed, delimiter, origin) {
         if (!parsed) return -Infinity;
         var fields = parsed.meta && Array.isArray(parsed.meta.fields) ? parsed.meta.fields : [];
         var data = Array.isArray(parsed.data) ? parsed.data : [];
@@ -278,6 +356,11 @@
         }
         if (delimiter === ';') {
             score += 25;
+        }
+        var semantic = scoreSemanticQuality(parsed);
+        score += semantic * 2000;
+        if (origin === 'papa') {
+            score += 200;
         }
         return score;
     }
@@ -320,9 +403,9 @@
         var best = null;
         var bestScore = -Infinity;
 
-        function considerResult(parsed, delimiter) {
+        function considerResult(parsed, delimiter, origin) {
             if (!parsed) return;
-            var score = scoreParseResult(parsed, delimiter);
+            var score = scoreParseResult(parsed, delimiter, origin);
             if (score > bestScore) {
                 bestScore = score;
                 best = {
@@ -341,9 +424,9 @@
             } catch (errManual) {
                 manual = null;
             }
-            considerResult(manual, delimiter);
+            considerResult(manual, delimiter, 'manual');
             var papa = parseCsvWithPapa(input, delimiter);
-            considerResult(papa, delimiter);
+            considerResult(papa, delimiter, 'papa');
         }
 
         if (!best) {

@@ -850,18 +850,30 @@
             columnList = Object.keys(row);
         }
         var isArrayRow = Array.isArray(row);
+        var fallbackSequence = computeFallbackSequence(columnList, row);
         for (var i = 0; i < columnList.length; i += 1) {
             var column = columnList[i];
             var canonical = normalizeHeaderKey(column);
-            if (!canonical) continue;
-            var key = mapCanonicalHeader(canonical);
-            if (!key || seenKeys[key]) continue;
+            var key = canonical ? mapCanonicalHeader(canonical) : '';
+            if ((!key || seenKeys[key]) && fallbackSequence && fallbackSequence.length > i) {
+                var fallbackKey = fallbackSequence[i];
+                if (fallbackKey && !seenKeys[fallbackKey]) {
+                    key = fallbackKey;
+                }
+            }
+            if (!key || seenKeys[key]) {
+                continue;
+            }
             seenKeys[key] = true;
             var rawValue;
             if (isArrayRow) {
                 rawValue = row[i];
-            } else {
+            } else if (column != null && Object.prototype.hasOwnProperty.call(row, column)) {
                 rawValue = row[column];
+            } else if (Object.prototype.hasOwnProperty.call(row, String(i))) {
+                rawValue = row[String(i)];
+            } else {
+                rawValue = null;
             }
             var cleaned = typeof rawValue === 'string' ? rawValue.trim() : rawValue;
             normalized[key] = cleaned != null ? cleaned : '';
@@ -909,6 +921,100 @@
         normalized._raw = row;
         normalized._searchBlob = buildSearchBlob(normalized);
         return normalized;
+    }
+
+    var DEFAULT_COLUMN_SEQUENCE = [
+        '',
+        'id',
+        '',
+        '',
+        'title',
+        'description',
+        'status',
+        'contact',
+        'priority',
+        'sla',
+        'dueAt',
+        'createdAt',
+        'requester',
+        'author',
+        '',
+        '',
+        'tags'
+    ];
+
+    function computeFallbackSequence(columns, row) {
+        var columnCount = Array.isArray(columns) && columns.length ? columns.length : 0;
+        if (!columnCount && Array.isArray(row)) {
+            columnCount = row.length;
+        }
+        if (columnCount < 6) {
+            return null;
+        }
+        var recognized = 0;
+        if (Array.isArray(columns) && columns.length) {
+            for (var i = 0; i < columns.length; i += 1) {
+                var canonical = normalizeHeaderKey(columns[i]);
+                if (canonical && mapCanonicalHeader(canonical)) {
+                    recognized += 1;
+                }
+            }
+        }
+        if (recognized >= 4) {
+            return null;
+        }
+        var rowArray = buildRowArraySnapshot(row, columns, columnCount);
+        if (!rowArray.length) {
+            return null;
+        }
+        var idCandidate = rowArray.length > 1 ? rowArray[1] : '';
+        var titleCandidate = rowArray.length > 4 ? rowArray[4] : '';
+        var descriptionCandidate = rowArray.length > 5 ? rowArray[5] : '';
+        if (!isLikelyId(idCandidate)) {
+            return null;
+        }
+        if (!hasMeaningfulText(titleCandidate) || !hasMeaningfulText(descriptionCandidate)) {
+            return null;
+        }
+        var sequence = [];
+        for (var j = 0; j < columnCount && j < DEFAULT_COLUMN_SEQUENCE.length; j += 1) {
+            sequence.push(DEFAULT_COLUMN_SEQUENCE[j]);
+        }
+        return sequence;
+    }
+
+    function buildRowArraySnapshot(row, columns, count) {
+        var snapshot = [];
+        for (var i = 0; i < count; i += 1) {
+            var value = null;
+            if (Array.isArray(row)) {
+                value = row[i];
+            } else if (row && typeof row === 'object') {
+                var key = Array.isArray(columns) && columns.length > i ? columns[i] : null;
+                if (key != null && Object.prototype.hasOwnProperty.call(row, key)) {
+                    value = row[key];
+                } else if (Object.prototype.hasOwnProperty.call(row, String(i))) {
+                    value = row[String(i)];
+                }
+            }
+            snapshot.push(value == null ? '' : value);
+        }
+        return snapshot;
+    }
+
+    function isLikelyId(value) {
+        if (!value) return false;
+        var text = String(value).trim();
+        if (!text) return false;
+        var match = text.match(/[A-Za-zА-Яа-я]{1,5}-\d{3,}/);
+        return Boolean(match);
+    }
+
+    function hasMeaningfulText(value) {
+        if (!value) return false;
+        var text = String(value).trim();
+        if (!text) return false;
+        return text.replace(/[^A-Za-zА-Яа-я0-9]+/g, '').length > 0;
     }
 
     function assignByToken(target, key, source, tokenList) {

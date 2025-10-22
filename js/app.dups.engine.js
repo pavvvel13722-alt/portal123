@@ -771,4 +771,4 @@
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = DuplicateEngineFactory;
     }
-})(typeof window !== 'undefined' ? window : self);
+})(typeof window !== 'undefined' ? window : (typeof self !== 'undefined' ? self : (typeof globalThis !== 'undefined' ? globalThis : {})));

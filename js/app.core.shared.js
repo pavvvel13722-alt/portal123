@@ -21,13 +21,22 @@
         'автор обращения': 'author',
         'автор заявки': 'author',
         'инициатор': 'author',
+        'author': 'author',
         'название': 'title',
         'тема': 'title',
+        'title': 'title',
+        'subject': 'title',
+        'template': 'title',
         'описание': 'description',
+        'description': 'description',
         'статус': 'status',
+        'status': 'status',
         'приоритет': 'priority',
+        'priority': 'priority',
         'создано': 'createdAt',
         'дата создания': 'createdAt',
+        'created': 'createdAt',
+        'created at': 'createdAt',
         'нормативный срок': 'dueAt',
         'дедлайн': 'dueAt',
         'sla индикатор': 'sla',
@@ -36,12 +45,15 @@
         'slm': 'sla',
         'контактное лицо': 'contact',
         'контакт': 'contact',
+        'contact': 'contact',
         'пользователь': 'requester',
         'инициатор обращения': 'requester',
         'заявитель': 'requester',
+        'requester': 'requester',
         'сервис': 'service',
         'теги': 'tags',
-        'тэги': 'tags'
+        'тэги': 'tags',
+        'tags': 'tags'
     };
 
     function scoreDecodedText(text) {
@@ -456,7 +468,24 @@
         for (var dataIndex = 0; dataIndex < rawData.length; dataIndex += 1) {
             var row = rawData[dataIndex];
             if (row && typeof row === 'object' && !Array.isArray(row)) {
-                sanitizedData.push(row);
+                var cleanedObject = {};
+                for (var originalKey in row) {
+                    if (!Object.prototype.hasOwnProperty.call(row, originalKey)) {
+                        continue;
+                    }
+                    if (originalKey === '__parsed_extra') {
+                        continue;
+                    }
+                    var originalValue = row[originalKey];
+                    if (originalValue == null) {
+                        cleanedObject[originalKey] = '';
+                    } else if (typeof originalValue === 'string') {
+                        cleanedObject[originalKey] = originalValue.trim();
+                    } else {
+                        cleanedObject[originalKey] = originalValue;
+                    }
+                }
+                sanitizedData.push(cleanedObject);
                 continue;
             }
             if (Array.isArray(row)) {
@@ -730,9 +759,45 @@
                 normalized.author = normalized.contact;
             }
         }
+
+        if (row && typeof row === 'object') {
+            assignByToken(normalized, 'id', row, ['id', 'номер', 'ticket']);
+            assignByToken(normalized, 'title', row, ['назван', 'шаблон', 'тема', 'title', 'subject', 'template', 'summary']);
+            assignByToken(normalized, 'description', row, ['описан', 'коммент', 'description', 'detail', 'remarks']);
+            assignByToken(normalized, 'status', row, ['статус', 'status', 'state']);
+            assignByToken(normalized, 'priority', row, ['приоритет', 'priority']);
+            assignByToken(normalized, 'createdAt', row, ['создан', 'дата открытия', 'created', 'registered']);
+            assignByToken(normalized, 'author', row, ['автор', 'инициатор', 'author', 'requester', 'contact']);
+        }
         normalized._raw = row;
         normalized._searchBlob = buildSearchBlob(normalized);
         return normalized;
+    }
+
+    function assignByToken(target, key, source, tokenList) {
+        if (target[key]) return;
+        if (!source || typeof source !== 'object') return;
+        for (var originalKey in source) {
+            if (!Object.prototype.hasOwnProperty.call(source, originalKey)) continue;
+            var canonical = normalizeHeaderKey(originalKey);
+            if (!canonical) continue;
+            for (var t = 0; t < tokenList.length; t += 1) {
+                if (canonical.indexOf(tokenList[t]) !== -1) {
+                    var value = source[originalKey];
+                    if (value == null) break;
+                    if (typeof value === 'string') {
+                        var trimmed = value.trim();
+                        if (trimmed) {
+                            target[key] = trimmed;
+                            return;
+                        }
+                    } else {
+                        target[key] = value;
+                        return;
+                    }
+                }
+            }
+        }
     }
 
     var api = {

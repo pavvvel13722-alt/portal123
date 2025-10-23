@@ -5,10 +5,10 @@
     } else if (typeof require === 'function') {
         try {
             PapaParser = require('./vendor/papaparse.min.js');
-        } catch (err) {
+        } catch (errPrimary) {
             try {
                 PapaParser = require('../js/vendor/papaparse.min.js');
-            } catch (errNested) {
+            } catch (errSecondary) {
                 PapaParser = null;
             }
         }
@@ -17,84 +17,86 @@
     var HEADER_KEY_MAP = {
         'id': 'id',
         'номер обращения': 'id',
+        'номер': 'id',
+        'ticket id': 'id',
+        'author': 'author',
         'автор': 'author',
         'автор обращения': 'author',
         'автор заявки': 'author',
         'инициатор': 'author',
-        'author': 'author',
+        'заявитель': 'author',
+        'contact': 'contact',
+        'контактное лицо': 'contact',
+        'контакт': 'contact',
+        'requester': 'requester',
+        'пользователь': 'requester',
+        'инициатор обращения': 'requester',
         'название': 'title',
         'тема': 'title',
         'title': 'title',
         'subject': 'title',
         'template': 'title',
+        'шаблон': 'title',
         'описание': 'description',
         'description': 'description',
+        'description details': 'description',
         'статус': 'status',
         'status': 'status',
-        'приоритет': 'priority',
         'priority': 'priority',
-        'создано': 'createdAt',
-        'дата создания': 'createdAt',
-        'created': 'createdAt',
-        'created at': 'createdAt',
-        'нормативный срок': 'dueAt',
-        'дедлайн': 'dueAt',
+        'приоритет': 'priority',
         'sla индикатор': 'sla',
         'slm индикатор': 'sla',
         'sla': 'sla',
         'slm': 'sla',
-        'контактное лицо': 'contact',
-        'контакт': 'contact',
-        'contact': 'contact',
-        'пользователь': 'requester',
-        'инициатор обращения': 'requester',
-        'заявитель': 'requester',
-        'requester': 'requester',
+        'нормативный срок': 'dueAt',
+        'дедлайн': 'dueAt',
+        'срок': 'dueAt',
+        'created': 'createdAt',
+        'created at': 'createdAt',
+        'дата создания': 'createdAt',
+        'создано': 'createdAt',
+        'service': 'service',
         'сервис': 'service',
+        'tags': 'tags',
         'теги': 'tags',
-        'тэги': 'tags',
-        'tags': 'tags'
+        'тэги': 'tags'
     };
 
     function scoreDecodedText(text) {
         if (!text) return -Infinity;
-        var cyrCount = 0;
-        var replaceCount = 0;
-        var highLatinCount = 0;
+        var score = 0;
         for (var i = 0; i < text.length; i += 1) {
             var code = text.charCodeAt(i);
             if ((code >= 0x0410 && code <= 0x044f) || code === 0x0401 || code === 0x0451) {
-                cyrCount += 1;
-                continue;
-            }
-            if (code === 0xfffd) {
-                replaceCount += 1;
-                continue;
-            }
-            if (code >= 0x00c0 && code <= 0x00ff) {
-                highLatinCount += 1;
+                score += 2;
+            } else if (code === 0xfffd) {
+                score -= 5;
+            } else if (code >= 0x00c0 && code <= 0x00ff) {
+                score -= 1;
             }
         }
-        return cyrCount * 2 - replaceCount * 5 - highLatinCount;
+        return score;
     }
 
     function extractSample(text, maxRows) {
+        if (!text) return '';
+        var limit = typeof maxRows === 'number' && maxRows > 0 ? maxRows : 50;
         var inQuotes = false;
         var rows = 0;
         for (var i = 0; i < text.length; i += 1) {
-            var char = text[i];
-            if (char === '"') {
-                if (inQuotes && text[i + 1] === '"') {
+            var ch = text.charAt(i);
+            if (ch === '"') {
+                if (inQuotes && text.charAt(i + 1) === '"') {
                     i += 1;
                 } else {
                     inQuotes = !inQuotes;
                 }
-            } else if (!inQuotes && (char === '\n' || char === '\r')) {
+            } else if (!inQuotes && (ch === '\n' || ch === '\r')) {
                 rows += 1;
-                if (rows >= maxRows) {
+                if (rows >= limit) {
                     return text.slice(0, i);
                 }
-                if (char === '\r' && text[i + 1] === '\n') {
+                if (ch === '\r' && text.charAt(i + 1) === '\n') {
                     i += 1;
                 }
             }
@@ -103,31 +105,100 @@
     }
 
     function getLengthStats(lengths) {
-        var counts = new Map();
-        lengths.forEach(function (length) {
-            counts.set(length, (counts.get(length) || 0) + 1);
-        });
-        var modeLength = 0;
+        var counts = {};
+        for (var i = 0; i < lengths.length; i += 1) {
+            var key = String(lengths[i]);
+            counts[key] = (counts[key] || 0) + 1;
+        }
+        var mode = 0;
         var modeCount = 0;
-        counts.forEach(function (count, length) {
-            if (count > modeCount) {
-                modeLength = length;
-                modeCount = count;
+        for (var value in counts) {
+            if (counts[value] > modeCount) {
+                mode = Number(value);
+                modeCount = counts[value];
             }
-        });
+        }
         var consistency = lengths.length ? modeCount / lengths.length : 0;
-        return { modeLength: modeLength, consistency: consistency };
+        return { modeLength: mode, consistency: consistency };
+    }
+
+    function detectDelimiter(text) {
+        if (!text) return ';';
+        var sample = extractSample(text, 200);
+        var candidates = [';', '\t', ',', '|'];
+        var scores = { ';': 0, '\t': 0, ',': 0, '|': 0 };
+        var counts = { ';': 0, '\t': 0, ',': 0, '|': 0 };
+        var inQuotes = false;
+        var current = { ';': 0, '\t': 0, ',': 0, '|': 0 };
+        for (var i = 0; i < sample.length; i += 1) {
+            var ch = sample.charAt(i);
+            if (ch === '"') {
+                if (inQuotes && sample.charAt(i + 1) === '"') {
+                    i += 1;
+                } else {
+                    inQuotes = !inQuotes;
+                }
+                continue;
+            }
+            if (!inQuotes) {
+                if (ch === '\n' || ch === '\r') {
+                    for (var j = 0; j < candidates.length; j += 1) {
+                        var key = candidates[j];
+                        if (current[key] > 0) {
+                            scores[key] += current[key];
+                            counts[key] += 1;
+                            current[key] = 0;
+                        }
+                    }
+                    if (ch === '\r' && sample.charAt(i + 1) === '\n') {
+                        i += 1;
+                    }
+                    continue;
+                }
+                for (var k = 0; k < candidates.length; k += 1) {
+                    var delimiter = candidates[k];
+                    if (delimiter.length === 1) {
+                        if (ch === delimiter) {
+                            current[delimiter] += 1;
+                            break;
+                        }
+                    } else {
+                        if (sample.slice(i, i + delimiter.length) === delimiter) {
+                            current[delimiter] += 1;
+                            i += delimiter.length - 1;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        for (var m = 0; m < candidates.length; m += 1) {
+            var option = candidates[m];
+            if (current[option] > 0) {
+                scores[option] += current[option];
+                counts[option] += 1;
+            }
+        }
+        var best = ';';
+        var bestScore = -1;
+        for (var n = 0; n < candidates.length; n += 1) {
+            var candidate = candidates[n];
+            if (!counts[candidate]) continue;
+            var avg = scores[candidate] / counts[candidate];
+            if (avg > bestScore) {
+                bestScore = avg;
+                best = candidate;
+            }
+        }
+        return best;
     }
 
     function parseCsv(text, options) {
         var opts = options || {};
-        var delimiter = opts.delimiter != null ? String(opts.delimiter) : ',';
-        if (!delimiter) {
-            delimiter = ',';
-        }
-        var header = Boolean(opts.header);
+        var delimiter = opts.delimiter != null ? String(opts.delimiter) : ';';
+        if (!delimiter) delimiter = ';';
+        var header = opts.header !== false;
         var skipEmptyLines = Boolean(opts.skipEmptyLines);
-
         var input = text == null ? '' : String(text);
         if (!input) {
             return { data: [], meta: { fields: header ? [] : null } };
@@ -135,99 +206,40 @@
         if (input.charCodeAt(0) === 0xfeff) {
             input = input.slice(1);
         }
-
         var rows = [];
         var row = [];
         var field = '';
-        var fieldOnlyWhitespace = true;
         var inQuotes = false;
-        var delimiterLength = delimiter.length;
-        if (delimiterLength === 0) {
-            delimiterLength = 1;
-            delimiter = ',';
-        }
-
-        function rowHasContent(columns) {
-            for (var i = 0; i < columns.length; i += 1) {
-                var value = columns[i];
-                if (value != null && String(value).trim() !== '') {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        function hasClosingQuote(source, startIndex) {
-            for (var i = startIndex; i < source.length; i += 1) {
-                var ch = source.charAt(i);
-                if (ch === '"') {
-                    if (source.charAt(i + 1) === '"') {
-                        i += 1;
-                        continue;
-                    }
-                    return true;
-                }
-                if (ch === '\n' || ch === '\r') {
-                    return false;
-                }
-            }
-            return false;
-        }
-
-        function pushField() {
-            row.push(field);
-            field = '';
-            fieldOnlyWhitespace = true;
-        }
-
-        function pushRow() {
-            if (skipEmptyLines && !rowHasContent(row)) {
-                row = [];
-                return;
-            }
-            rows.push(row.slice());
-            row = [];
-        }
-
         for (var index = 0; index < input.length; index += 1) {
             var char = input.charAt(index);
             if (char === '"') {
                 if (inQuotes) {
                     if (input.charAt(index + 1) === '"') {
                         field += '"';
-                        fieldOnlyWhitespace = false;
                         index += 1;
-                        continue;
+                    } else {
+                        inQuotes = false;
                     }
-                    inQuotes = false;
                     continue;
                 }
-                if (field.length === 0 || fieldOnlyWhitespace) {
-                    if (hasClosingQuote(input, index + 1)) {
-                        inQuotes = true;
-                        if (fieldOnlyWhitespace) {
-                            field = '';
-                            fieldOnlyWhitespace = true;
-                        }
-                        continue;
-                    }
-                    field += '"';
-                    fieldOnlyWhitespace = false;
+                if (!field.length) {
+                    inQuotes = true;
                     continue;
                 }
             }
             if (!inQuotes) {
-                if ((delimiterLength === 1 && char === delimiter) ||
-                    (delimiterLength > 1 && input.slice(index, index + delimiterLength) === delimiter)) {
-                    pushField();
-                    if (delimiterLength > 1) {
-                        index += delimiterLength - 1;
-                    }
+                if (char === delimiter) {
+                    row.push(field);
+                    field = '';
                     continue;
                 }
                 if (char === '\r' || char === '\n') {
-                    pushField();
-                    pushRow();
+                    row.push(field);
+                    field = '';
+                    if (!skipEmptyLines || rowHasValue(row)) {
+                        rows.push(row);
+                    }
+                    row = [];
                     if (char === '\r' && input.charAt(index + 1) === '\n') {
                         index += 1;
                     }
@@ -235,173 +247,50 @@
                 }
             }
             field += char;
-            if (char !== ' ' && char !== '\t') {
-                fieldOnlyWhitespace = false;
-            }
         }
-        pushField();
-        pushRow();
-
+        row.push(field);
+        if (!skipEmptyLines || rowHasValue(row)) {
+            rows.push(row);
+        }
         if (!rows.length) {
             return { data: [], meta: { fields: header ? [] : null } };
         }
-
         if (!header) {
             return { data: rows, meta: { fields: null } };
         }
-
-        var headers = rows[0].map(function (cell) {
-            return cell == null ? '' : String(cell).trim();
-        });
-        var dataRows = [];
+        var headers = [];
+        var first = rows[0];
+        for (var h = 0; h < first.length; h += 1) {
+            headers.push(first[h] == null ? '' : String(first[h]).trim());
+        }
+        var data = [];
         for (var r = 1; r < rows.length; r += 1) {
             var source = rows[r];
-            if (skipEmptyLines && (!source || !rowHasContent(source))) {
-                continue;
-            }
+            if (skipEmptyLines && !rowHasValue(source)) continue;
             var entry = {};
             for (var c = 0; c < headers.length; c += 1) {
-                var key = headers[c];
-                if (!key) {
-                    continue;
-                }
-                var value = source && source[c] != null ? source[c] : '';
-                entry[key] = typeof value === 'string' ? value.trim() : value;
+                var name = headers[c];
+                if (!name) continue;
+                var value = source[c];
+                entry[name] = value == null ? '' : String(value).trim();
             }
-            dataRows.push(entry);
+            data.push(entry);
         }
-
-        return { data: dataRows, meta: { fields: headers } };
+        return { data: data, meta: { fields: headers } };
     }
 
-    function scoreSemanticQuality(parsed) {
-        if (!parsed || !parsed.meta || !Array.isArray(parsed.meta.fields)) {
-            return 0;
-        }
-        var fields = parsed.meta.fields;
-        if (!fields.length) {
-            return 0;
-        }
-        var data = Array.isArray(parsed.data) ? parsed.data : [];
-        if (!data.length) {
-            return 0;
-        }
-        var columnKeys = [];
-        var seen = {};
-        for (var i = 0; i < fields.length; i += 1) {
-            var header = fields[i];
-            var canonical = normalizeHeaderKey(header);
-            var mapped = mapCanonicalHeader(canonical);
-            if (!mapped || seen[mapped]) {
-                columnKeys.push('');
-            } else {
-                columnKeys.push(mapped);
-                seen[mapped] = true;
+    function rowHasValue(row) {
+        if (!row) return false;
+        for (var i = 0; i < row.length; i += 1) {
+            if (row[i] != null && String(row[i]).trim() !== '') {
+                return true;
             }
         }
-        var sampleSize = Math.min(data.length, 50);
-        if (!sampleSize) {
-            return 0;
-        }
-        var idHits = 0;
-        var titleHits = 0;
-        var descHits = 0;
-        var authorHits = 0;
-        for (var rowIndex = 0; rowIndex < sampleSize; rowIndex += 1) {
-            var row = data[rowIndex];
-            if (!row || typeof row !== 'object') {
-                continue;
-            }
-            var idValue = '';
-            var titleValue = '';
-            var descValue = '';
-            var authorValue = '';
-            for (var c = 0; c < columnKeys.length; c += 1) {
-                var key = columnKeys[c];
-                if (!key) {
-                    continue;
-                }
-                var originalHeader = fields[c];
-                var cell = row[originalHeader];
-                var value = typeof cell === 'string' ? cell.trim() : cell;
-                if (!value) {
-                    continue;
-                }
-                if (key === 'id' && !idValue) {
-                    idValue = value;
-                } else if (key === 'title' && !titleValue) {
-                    titleValue = value;
-                } else if (key === 'description' && !descValue) {
-                    descValue = value;
-                } else if (key === 'author' && !authorValue) {
-                    authorValue = value;
-                }
-            }
-            if (idValue) idHits += 1;
-            if (titleValue) titleHits += 1;
-            if (descValue) descHits += 1;
-            if (authorValue) authorHits += 1;
-        }
-        var coverage = (idHits + titleHits + descHits + authorHits) / (sampleSize * 4);
-        if (!isFinite(coverage) || coverage < 0) {
-            return 0;
-        }
-        if (coverage > 1) {
-            coverage = 1;
-        }
-        return coverage;
-    }
-
-    function scoreParseResult(parsed, delimiter, origin) {
-        if (!parsed) return -Infinity;
-        var fields = parsed.meta && Array.isArray(parsed.meta.fields) ? parsed.meta.fields : [];
-        var data = Array.isArray(parsed.data) ? parsed.data : [];
-        var fieldCount = fields.length;
-        var lengths = [];
-        for (var i = 0; i < data.length; i += 1) {
-            var row = data[i];
-            if (row && typeof row === 'object') {
-                lengths.push(Object.keys(row).length);
-            }
-        }
-        var stats = getLengthStats(lengths);
-        var collapsedHeader = false;
-        if (fieldCount <= 1 && fields.length) {
-            var headerText = String(fields[0] == null ? '' : fields[0]);
-            for (var j = 0; j < headerText.length; j += 1) {
-                var ch = headerText.charAt(j);
-                if (ch === ';' || ch === ',' || ch === '\t' || ch === '|') {
-                    collapsedHeader = true;
-                    break;
-                }
-            }
-        }
-        var consistent = stats.consistency || 0;
-        var score = 0;
-        if (fieldCount > 1) {
-            score += fieldCount * 1000;
-        }
-        score += data.length;
-        score += consistent * 100;
-        if (collapsedHeader) {
-            score -= 5000;
-        }
-        if (delimiter === ';') {
-            score += 25;
-        }
-        var semantic = scoreSemanticQuality(parsed);
-        score += semantic * 2000;
-        if (origin === 'papa') {
-            score += 200;
-        }
-        return score;
+        return false;
     }
 
     function parseCsvWithPapa(text, delimiter) {
         if (!PapaParser) return null;
-        if (!text) {
-            return { data: [], meta: { fields: [] } };
-        }
         try {
             var result = PapaParser.parse(text, {
                 delimiter: delimiter,
@@ -412,15 +301,102 @@
                     return String(header).trim();
                 }
             });
-            if (!result || !result.meta) {
-                return null;
-            }
-            var fields = Array.isArray(result.meta.fields) ? result.meta.fields : [];
-            var data = Array.isArray(result.data) ? result.data : [];
-            return { data: data, meta: { fields: fields } };
+            if (!result || !result.meta) return null;
+            return { data: result.data || [], meta: { fields: result.meta.fields || [] } };
         } catch (err) {
             return null;
         }
+    }
+
+    function normalizeHeaders(fields) {
+        var normalized = [];
+        var seen = {};
+        for (var i = 0; i < fields.length; i += 1) {
+            var value = fields[i] == null ? '' : String(fields[i]).trim();
+            if (!value) {
+                normalized.push('');
+                continue;
+            }
+            var candidate = value;
+            var counter = 1;
+            while (seen[candidate]) {
+                counter += 1;
+                candidate = value + ' ' + counter;
+            }
+            seen[candidate] = true;
+            normalized.push(candidate);
+        }
+        return normalized;
+    }
+
+    function buildFromArrayRows(rows) {
+        if (!rows || !rows.length) {
+            return { data: [], meta: { fields: [] } };
+        }
+        var headerRow = rows[0];
+        var headerCells = Array.isArray(headerRow) ? headerRow : [headerRow];
+        var headers = [];
+        for (var i = 0; i < headerCells.length; i += 1) {
+            headers.push(headerCells[i] == null ? '' : String(headerCells[i]).trim());
+        }
+        var data = [];
+        for (var r = 1; r < rows.length; r += 1) {
+            var source = rows[r];
+            if (!Array.isArray(source)) {
+                source = [source];
+            }
+            var entry = {};
+            for (var c = 0; c < headers.length; c += 1) {
+                var header = headers[c];
+                if (!header) continue;
+                var value = source[c];
+                entry[header] = value == null ? '' : String(value).trim();
+            }
+            data.push(entry);
+        }
+        return { data: data, meta: { fields: headers } };
+    }
+
+    function prepareParsedResult(parsed) {
+        var originalFields = parsed && parsed.meta && Array.isArray(parsed.meta.fields)
+            ? parsed.meta.fields
+            : [];
+        var normalizedFields = normalizeHeaders(originalFields);
+        var data = [];
+        var rawData = parsed && Array.isArray(parsed.data) ? parsed.data : [];
+        for (var i = 0; i < rawData.length; i += 1) {
+            var row = rawData[i];
+            var entry = {};
+            for (var c = 0; c < normalizedFields.length; c += 1) {
+                var header = normalizedFields[c];
+                if (!header) continue;
+                var sourceKey = originalFields[c];
+                var value = null;
+                if (row && typeof row === 'object' && !Array.isArray(row)) {
+                    if (sourceKey && Object.prototype.hasOwnProperty.call(row, sourceKey)) {
+                        value = row[sourceKey];
+                    } else if (Object.prototype.hasOwnProperty.call(row, header)) {
+                        value = row[header];
+                    } else if (Object.prototype.hasOwnProperty.call(row, String(c))) {
+                        value = row[String(c)];
+                    }
+                } else if (Array.isArray(row)) {
+                    value = row[c];
+                }
+                entry[header] = value == null ? '' : String(value).trim();
+            }
+            data.push(entry);
+        }
+        return { data: data, meta: { fields: normalizedFields } };
+    }
+
+    function scoreParseResult(parsed) {
+        if (!parsed || !parsed.meta) return -Infinity;
+        var fields = parsed.meta.fields;
+        if (!Array.isArray(fields) || !fields.length) return -Infinity;
+        var data = Array.isArray(parsed.data) ? parsed.data : [];
+        if (!data.length) return -Infinity;
+        return fields.length * 1000 + data.length;
     }
 
     function autoParseCsv(text, options) {
@@ -428,406 +404,98 @@
         if (!input) {
             return { data: [], meta: { fields: [] }, delimiter: ';' };
         }
-        var opts = options || {};
-        var delimiterList = Array.isArray(opts.delimiters) && opts.delimiters.length
-            ? opts.delimiters.slice()
-            : [';', '\t', ',', '|'];
-        var best = null;
+        var delimiter = detectDelimiter(input);
+        var candidates = [];
+        var papaPrimary = parseCsvWithPapa(input, delimiter);
+        if (papaPrimary) {
+            candidates.push({ result: papaPrimary, delimiter: delimiter });
+        }
+        var manualPrimary = parseCsv(input, { delimiter: delimiter, header: true, skipEmptyLines: true });
+        candidates.push({ result: manualPrimary, delimiter: delimiter });
+        if (delimiter !== ';') {
+            var papaSemicolon = parseCsvWithPapa(input, ';');
+            if (papaSemicolon) {
+                candidates.push({ result: papaSemicolon, delimiter: ';' });
+            }
+            var manualSemicolon = parseCsv(input, { delimiter: ';', header: true, skipEmptyLines: true });
+            candidates.push({ result: manualSemicolon, delimiter: ';' });
+        }
+        var bestCandidate = null;
         var bestScore = -Infinity;
-
-        function considerResult(parsed, delimiter, origin) {
-            if (!parsed) return;
-            var score = scoreParseResult(parsed, delimiter, origin);
+        for (var i = 0; i < candidates.length; i += 1) {
+            var candidate = candidates[i];
+            var score = scoreParseResult(candidate.result);
             if (score > bestScore) {
                 bestScore = score;
-                best = {
-                    data: parsed.data || [],
-                    meta: parsed.meta || { fields: [] },
-                    delimiter: delimiter
-                };
+                bestCandidate = candidate;
             }
         }
-
-        for (var i = 0; i < delimiterList.length; i += 1) {
-            var delimiter = delimiterList[i];
-            var manual = null;
-            try {
-                manual = parseCsv(input, { delimiter: delimiter, header: true, skipEmptyLines: true });
-            } catch (errManual) {
-                manual = null;
+        if (!bestCandidate || bestScore === -Infinity) {
+            var fallback = parseCsv(input, { delimiter: delimiter, header: false, skipEmptyLines: true });
+            if (fallback && Array.isArray(fallback.data) && fallback.data.length) {
+                var rebuilt = buildFromArrayRows(fallback.data);
+                var preparedFallback = prepareParsedResult(rebuilt);
+                preparedFallback.delimiter = delimiter;
+                return preparedFallback;
             }
-            considerResult(manual, delimiter, 'manual');
-            var papa = parseCsvWithPapa(input, delimiter);
-            considerResult(papa, delimiter, 'papa');
+            return { data: [], meta: { fields: [] }, delimiter: delimiter };
         }
-
-        if (!best) {
-            best = { data: [], meta: { fields: [] }, delimiter: delimiterList[0] };
-        } else if (best.meta && Array.isArray(best.meta.fields) && best.meta.fields.length <= 1) {
-            var fallback = parseCsvWithPapa(input, ';');
-            if (fallback && fallback.meta && Array.isArray(fallback.meta.fields) && fallback.meta.fields.length > 1) {
-                best = {
-                    data: fallback.data || [],
-                    meta: fallback.meta || { fields: [] },
-                    delimiter: ';'
-                };
+        var prepared = prepareParsedResult(bestCandidate.result);
+        if (!prepared.meta.fields.length) {
+            var fallbackArrays = parseCsv(input, { delimiter: bestCandidate.delimiter, header: false, skipEmptyLines: true });
+            if (fallbackArrays && Array.isArray(fallbackArrays.data) && fallbackArrays.data.length) {
+                prepared = prepareParsedResult(buildFromArrayRows(fallbackArrays.data));
             }
         }
-        var sanitized = sanitizeParsedResult(best);
-        sanitized.delimiter = best && best.delimiter ? best.delimiter : (delimiterList.length ? delimiterList[0] : ';');
-        if (isCollapsedResult(sanitized.meta.fields, sanitized.data, sanitized.delimiter)) {
-            var fallbackDelimiter = sanitized.delimiter || detectDelimiter(input);
-            var fallbackRaw = parseCsv(input, { delimiter: fallbackDelimiter, header: false, skipEmptyLines: true });
-            var rebuilt = rebuildFromArrayRows(fallbackRaw, fallbackDelimiter);
-            if ((!rebuilt || rebuilt.meta.fields.length <= 1) && fallbackDelimiter !== ';') {
-                fallbackRaw = parseCsv(input, { delimiter: ';', header: false, skipEmptyLines: true });
-                rebuilt = rebuildFromArrayRows(fallbackRaw, ';');
-            }
-            if (rebuilt && rebuilt.meta && Array.isArray(rebuilt.meta.fields) && rebuilt.meta.fields.length > 1) {
-                sanitized = rebuilt;
-                sanitized.delimiter = fallbackDelimiter;
-            }
-        }
-        return sanitized;
-    }
-
-    function sanitizeParsedResult(parsed) {
-        var originalFields = parsed && parsed.meta && Array.isArray(parsed.meta.fields) ? parsed.meta.fields : [];
-        var normalizedFields = [];
-        for (var fieldIndex = 0; fieldIndex < originalFields.length; fieldIndex += 1) {
-            var headerValue = originalFields[fieldIndex];
-            if (headerValue == null) {
-                normalizedFields.push('');
-            } else {
-                normalizedFields.push(String(headerValue).trim());
-            }
-        }
-        var rawData = parsed && Array.isArray(parsed.data) ? parsed.data : [];
-        var sanitizedData = [];
-        for (var dataIndex = 0; dataIndex < rawData.length; dataIndex += 1) {
-            var row = rawData[dataIndex];
-            if (row && typeof row === 'object' && !Array.isArray(row)) {
-                var cleanedObject = {};
-                for (var originalKey in row) {
-                    if (!Object.prototype.hasOwnProperty.call(row, originalKey)) {
-                        continue;
-                    }
-                    if (originalKey === '__parsed_extra') {
-                        continue;
-                    }
-                    var originalValue = row[originalKey];
-                    if (originalValue == null) {
-                        cleanedObject[originalKey] = '';
-                    } else if (typeof originalValue === 'string') {
-                        cleanedObject[originalKey] = originalValue.trim();
-                    } else {
-                        cleanedObject[originalKey] = originalValue;
-                    }
-                }
-                sanitizedData.push(cleanedObject);
-                continue;
-            }
-            if (Array.isArray(row)) {
-                var reconstructed = {};
-                for (var columnIndex = 0; columnIndex < normalizedFields.length; columnIndex += 1) {
-                    var headerName = normalizedFields[columnIndex];
-                    if (!headerName) {
-                        continue;
-                    }
-                    var cellValue = row[columnIndex];
-                    if (cellValue == null) {
-                        reconstructed[headerName] = '';
-                    } else if (typeof cellValue === 'string') {
-                        reconstructed[headerName] = cellValue.trim();
-                    } else {
-                        reconstructed[headerName] = cellValue;
-                    }
-                }
-                sanitizedData.push(reconstructed);
-                continue;
-            }
-            var fallbackRow = {};
-            if (normalizedFields.length === 1) {
-                var singleHeader = normalizedFields[0];
-                fallbackRow[singleHeader] = row == null ? '' : (typeof row === 'string' ? String(row).trim() : row);
-            }
-            sanitizedData.push(fallbackRow);
-        }
-        return { data: sanitizedData, meta: { fields: normalizedFields } };
-    }
-
-    function isCollapsedResult(fields, data, delimiter) {
-        if (!fields || fields.length <= 1) {
-            return true;
-        }
-        var firstHeader = fields[0] || '';
-        if (delimiter && typeof firstHeader === 'string' && firstHeader.indexOf(delimiter) !== -1) {
-            return true;
-        }
-        if (!data || !data.length) {
-            return false;
-        }
-        var sample = data[0];
-        if (sample && typeof sample === 'object') {
-            for (var key in sample) {
-                if (!Object.prototype.hasOwnProperty.call(sample, key)) {
-                    continue;
-                }
-                var value = sample[key];
-                if (typeof value === 'string' && delimiter && value.indexOf(delimiter) !== -1) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    function rebuildFromArrayRows(raw, delimiter) {
-        if (!raw || !Array.isArray(raw.data) || raw.data.length < 1) {
-            return null;
-        }
-        var headerRow = raw.data[0];
-        var headerCells;
-        if (Array.isArray(headerRow) && headerRow.length > 1) {
-            headerCells = headerRow;
-        } else {
-            var headerValue = Array.isArray(headerRow) && headerRow.length ? headerRow[0] : headerRow;
-            headerCells = expandRowCells(headerValue, delimiter);
-        }
-        if (!headerCells || headerCells.length <= 1) {
-            return null;
-        }
-        var headers = [];
-        for (var i = 0; i < headerCells.length; i += 1) {
-            var headerText = headerCells[i];
-            headers.push(headerText == null ? '' : String(headerText).trim());
-        }
-        var rows = [];
-        for (var r = 1; r < raw.data.length; r += 1) {
-            var sourceRow = raw.data[r];
-            var expanded = Array.isArray(sourceRow) && sourceRow.length > 1
-                ? sourceRow
-                : expandRowCells(sourceRow, delimiter);
-            if (!expanded) {
-                continue;
-            }
-            var reconstructed = {};
-            for (var c = 0; c < headers.length; c += 1) {
-                var columnName = headers[c];
-                if (!columnName) {
-                    continue;
-                }
-                var cell = expanded[c];
-                if (cell == null) {
-                    reconstructed[columnName] = '';
-                } else if (typeof cell === 'string') {
-                    reconstructed[columnName] = cell.trim();
-                } else {
-                    reconstructed[columnName] = cell;
-                }
-            }
-            rows.push(reconstructed);
-        }
-        return { data: rows, meta: { fields: headers } };
-    }
-
-    function expandRowCells(row, delimiter) {
-        if (row == null) {
-            return null;
-        }
-        if (Array.isArray(row)) {
-            if (!row.length) {
-                return null;
-            }
-            if (row.length === 1) {
-                return expandRowCells(row[0], delimiter);
-            }
-            return row;
-        }
-        var text = String(row);
-        if (!text) {
-            return [''];
-        }
-        var trimmed = text.trim();
-        if (trimmed.length > 1 && trimmed.charAt(0) === '"' && trimmed.charAt(trimmed.length - 1) === '"') {
-            trimmed = trimmed.slice(1, trimmed.length - 1);
-        }
-        var parsed = parseCsv(trimmed, { delimiter: delimiter || ';', header: false, skipEmptyLines: false });
-        if (parsed && Array.isArray(parsed.data) && parsed.data.length) {
-            return parsed.data[0];
-        }
-        return [trimmed];
-    }
-
-    function detectDelimiter(text) {
-        if (!text) {
-            return ';';
-        }
-        var candidates = [';', ',', '\t', '|'];
-        var sample = extractSample(text, 400);
-        var totals = {};
-        var rowCounts = {};
-        var current = {};
-        var i;
-        for (i = 0; i < candidates.length; i += 1) {
-            var delimiter = candidates[i];
-            totals[delimiter] = 0;
-            rowCounts[delimiter] = 0;
-            current[delimiter] = 0;
-        }
-        var inQuotes = false;
-        var length = sample.length;
-        for (var index = 0; index < length; index += 1) {
-            var char = sample.charAt(index);
-            if (char === '"') {
-                if (inQuotes && sample.charAt(index + 1) === '"') {
-                    index += 1;
-                } else {
-                    inQuotes = !inQuotes;
-                }
-                continue;
-            }
-            if (!inQuotes) {
-                if (char === '\r' || char === '\n') {
-                    for (i = 0; i < candidates.length; i += 1) {
-                        var delimiterKey = candidates[i];
-                        if (current[delimiterKey] > 0) {
-                            totals[delimiterKey] += current[delimiterKey];
-                            rowCounts[delimiterKey] += 1;
-                        }
-                        current[delimiterKey] = 0;
-                    }
-                    if (char === '\r' && sample.charAt(index + 1) === '\n') {
-                        index += 1;
-                    }
-                    continue;
-                }
-                for (i = 0; i < candidates.length; i += 1) {
-                    var candidate = candidates[i];
-                    var candidateLength = candidate.length;
-                    if (candidateLength === 1) {
-                        if (char === candidate) {
-                            current[candidate] += 1;
-                            break;
-                        }
-                    } else {
-                        if (sample.slice(index, index + candidateLength) === candidate) {
-                            current[candidate] += 1;
-                            index += candidateLength - 1;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        for (i = 0; i < candidates.length; i += 1) {
-            var lastDelimiter = candidates[i];
-            if (current[lastDelimiter] > 0) {
-                totals[lastDelimiter] += current[lastDelimiter];
-                rowCounts[lastDelimiter] += 1;
-            }
-        }
-        var best = candidates[0];
-        var bestScore = -1;
-        for (i = 0; i < candidates.length; i += 1) {
-            var option = candidates[i];
-            var total = totals[option];
-            var rows = rowCounts[option];
-            if (!total || !rows) {
-                continue;
-            }
-            var score = total / rows;
-            if (score > bestScore) {
-                bestScore = score;
-                best = option;
-            }
-        }
-        return best;
+        prepared.delimiter = bestCandidate.delimiter;
+        return prepared;
     }
 
     function normalizeHeaderKey(value) {
         if (value == null) return '';
         var text = String(value);
-        var result = '';
-        var lastSpace = false;
+        var cleaned = '';
         for (var i = 0; i < text.length; i += 1) {
             var code = text.charCodeAt(i);
-            if (code === 0xfeff) {
-                continue;
-            }
-            var ch = text[i];
-            if (ch === '\u00A0') {
-                ch = ' ';
-            }
-            if (ch === 'ё') {
-                ch = 'е';
-            } else if (ch === 'Ё') {
-                ch = 'Е';
-            }
+            if (code === 0xfeff) continue;
+            var ch = text.charAt(i);
+            if (ch === '\u00A0') ch = ' ';
+            if (ch === 'ё') ch = 'е';
+            if (ch === 'Ё') ch = 'Е';
             var lower = ch.toLowerCase();
             var lowerCode = lower.charCodeAt(0);
-            var isLatin = lowerCode >= 97 && lowerCode <= 122;
             var isDigit = lowerCode >= 48 && lowerCode <= 57;
+            var isLatin = lowerCode >= 97 && lowerCode <= 122;
             var isCyr = lowerCode >= 1072 && lowerCode <= 1103;
-            if (isLatin || isDigit || isCyr) {
-                result += lower;
-                lastSpace = false;
+            if (isDigit || isLatin || isCyr) {
+                cleaned += lower;
             } else {
-                if (!lastSpace && result.length) {
-                    result += ' ';
-                    lastSpace = true;
-                }
+                cleaned += ' ';
             }
         }
-        return result.trim().replace(/\s+/g, ' ');
+        return cleaned.replace(/\s+/g, ' ').trim();
     }
 
     function mapCanonicalHeader(canonical) {
         if (!canonical) return '';
-        if (HEADER_KEY_MAP[canonical]) {
-            return HEADER_KEY_MAP[canonical];
-        }
-        if (canonical.indexOf('автор') !== -1 || canonical.indexOf('инициатор') !== -1) {
-            return 'author';
-        }
-        if (canonical.indexOf('название') !== -1 || canonical.indexOf('тема') !== -1 || canonical.indexOf('шаблон') !== -1) {
-            return 'title';
-        }
-        if (canonical.indexOf('описание') !== -1 || canonical.indexOf('комментарий') !== -1) {
-            return 'description';
-        }
-        if (canonical.indexOf('статус') !== -1) {
-            return 'status';
-        }
-        if (canonical.indexOf('приоритет') !== -1) {
-            return 'priority';
-        }
-        if (canonical.indexOf('sla') !== -1 || canonical.indexOf('slm') !== -1) {
-            return 'sla';
-        }
-        if (canonical.indexOf('норматив') !== -1 || canonical.indexOf('дедлайн') !== -1 || canonical.indexOf('срок') !== -1) {
-            return 'dueAt';
-        }
-        if (canonical.indexOf('создан') !== -1 || canonical.indexOf('дата открытия') !== -1 || canonical.indexOf('зарегистр') !== -1) {
-            return 'createdAt';
-        }
-        if (canonical.indexOf('контакт') !== -1 || canonical.indexOf('ответственный') !== -1) {
-            return 'contact';
-        }
-        if (canonical.indexOf('пользователь') !== -1 || canonical.indexOf('заявитель') !== -1 || canonical.indexOf('податель') !== -1) {
-            return 'requester';
-        }
-        if (canonical.indexOf('тег') !== -1 || canonical.indexOf('метка') !== -1) {
-            return 'tags';
-        }
-        if (canonical.indexOf('сервис') !== -1 || canonical.indexOf('услуга') !== -1) {
-            return 'service';
-        }
+        if (HEADER_KEY_MAP[canonical]) return HEADER_KEY_MAP[canonical];
+        if (canonical.indexOf('автор') !== -1 || canonical.indexOf('инициатор') !== -1) return 'author';
+        if (canonical.indexOf('назв') !== -1 || canonical.indexOf('шаблон') !== -1 || canonical.indexOf('тема') !== -1) return 'title';
+        if (canonical.indexOf('описан') !== -1 || canonical.indexOf('коммент') !== -1) return 'description';
+        if (canonical.indexOf('статус') !== -1) return 'status';
+        if (canonical.indexOf('приоритет') !== -1) return 'priority';
+        if (canonical.indexOf('создан') !== -1 || canonical.indexOf('дата откр') !== -1) return 'createdAt';
+        if (canonical.indexOf('sla') !== -1 || canonical.indexOf('slm') !== -1) return 'sla';
+        if (canonical.indexOf('срок') !== -1 || canonical.indexOf('норматив') !== -1) return 'dueAt';
+        if (canonical.indexOf('контакт') !== -1) return 'contact';
+        if (canonical.indexOf('заявител') !== -1 || canonical.indexOf('requester') !== -1) return 'requester';
+        if (canonical.indexOf('сервис') !== -1 || canonical.indexOf('услуга') !== -1) return 'service';
+        if (canonical.indexOf('тег') !== -1 || canonical.indexOf('метк') !== -1) return 'tags';
         return '';
     }
 
     function buildSearchBlob(record) {
-        return [
+        var parts = [
             record.id,
             record.author,
             record.contact,
@@ -836,211 +504,78 @@
             record.description,
             record.service,
             record.tags
-        ]
-            .filter(Boolean)
-            .join(' \n ')
-            .toLowerCase();
+        ];
+        var filtered = [];
+        for (var i = 0; i < parts.length; i += 1) {
+            if (parts[i]) filtered.push(String(parts[i]));
+        }
+        return filtered.join(' \n ').toLowerCase();
+    }
+
+    function assignIfEmpty(target, key, value) {
+        if (!target[key] && value) {
+            target[key] = value;
+        }
     }
 
     function normalizeRow(row, columns) {
-        var normalized = {};
-        var seenKeys = {};
-        var columnList = Array.isArray(columns) && columns.length ? columns.slice() : [];
-        if (!columnList.length && row && typeof row === 'object') {
-            columnList = Object.keys(row);
+        var normalized = {
+            id: '',
+            title: '',
+            description: '',
+            status: '',
+            author: '',
+            contact: '',
+            requester: '',
+            priority: '',
+            sla: '',
+            dueAt: '',
+            createdAt: '',
+            service: '',
+            tags: ''
+        };
+        var headers = Array.isArray(columns) ? columns.slice() : [];
+        if (!headers.length && row && typeof row === 'object' && !Array.isArray(row)) {
+            headers = Object.keys(row);
         }
-        var isArrayRow = Array.isArray(row);
-        var fallbackSequence = computeFallbackSequence(columnList, row);
-        for (var i = 0; i < columnList.length; i += 1) {
-            var column = columnList[i];
-            var canonical = normalizeHeaderKey(column);
-            var key = canonical ? mapCanonicalHeader(canonical) : '';
-            if ((!key || seenKeys[key]) && fallbackSequence && fallbackSequence.length > i) {
-                var fallbackKey = fallbackSequence[i];
-                if (fallbackKey && !seenKeys[fallbackKey]) {
-                    key = fallbackKey;
+        var seen = {};
+        for (var i = 0; i < headers.length; i += 1) {
+            var headerName = headers[i];
+            if (!headerName) continue;
+            var canonical = normalizeHeaderKey(headerName);
+            var mapped = mapCanonicalHeader(canonical);
+            if (!mapped || seen[mapped]) continue;
+            var value = '';
+            if (row && typeof row === 'object' && !Array.isArray(row)) {
+                if (Object.prototype.hasOwnProperty.call(row, headerName)) {
+                    value = row[headerName];
+                } else if (Object.prototype.hasOwnProperty.call(row, String(i))) {
+                    value = row[String(i)];
                 }
+            } else if (Array.isArray(row)) {
+                value = row[i];
             }
-            if (!key || seenKeys[key]) {
-                continue;
-            }
-            seenKeys[key] = true;
-            var rawValue;
-            if (isArrayRow) {
-                rawValue = row[i];
-            } else if (column != null && Object.prototype.hasOwnProperty.call(row, column)) {
-                rawValue = row[column];
-            } else if (Object.prototype.hasOwnProperty.call(row, String(i))) {
-                rawValue = row[String(i)];
-            } else {
-                rawValue = null;
-            }
-            var cleaned = typeof rawValue === 'string' ? rawValue.trim() : rawValue;
-            normalized[key] = cleaned != null ? cleaned : '';
+            normalized[mapped] = value == null ? '' : String(value).trim();
+            seen[mapped] = true;
         }
-        if (row && typeof row === 'object' && !isArrayRow) {
-            for (var originalKey in row) {
-                if (!Object.prototype.hasOwnProperty.call(row, originalKey)) continue;
-                var mapped = normalizeHeaderKey(originalKey);
-                if (!mapped) continue;
-                var targetKey = mapCanonicalHeader(mapped);
-                if (!targetKey || seenKeys[targetKey]) continue;
-                seenKeys[targetKey] = true;
-                var originalValue = row[originalKey];
-                var trimmedValue = typeof originalValue === 'string' ? originalValue.trim() : originalValue;
-                normalized[targetKey] = trimmedValue != null ? trimmedValue : '';
+        if (row && typeof row === 'object' && !Array.isArray(row)) {
+            for (var key in row) {
+                if (!Object.prototype.hasOwnProperty.call(row, key)) continue;
+                var canonicalKey = normalizeHeaderKey(key);
+                var mappedKey = mapCanonicalHeader(canonicalKey);
+                if (!mappedKey || seen[mappedKey]) continue;
+                var cell = row[key];
+                normalized[mappedKey] = cell == null ? '' : String(cell).trim();
+                seen[mappedKey] = true;
             }
         }
-        normalized.title = normalized.title || '';
-        normalized.description = normalized.description || '';
-        normalized.createdAt = normalized.createdAt || '';
-        normalized.id = normalized.id || '';
-        normalized.priority = normalized.priority || '';
-        normalized.sla = normalized.sla || '';
-        normalized.contact = normalized.contact || '';
-        normalized.requester = normalized.requester || '';
-        normalized.service = normalized.service || '';
-        normalized.tags = normalized.tags || '';
         if (!normalized.author) {
-            if (normalized.requester) {
-                normalized.author = normalized.requester;
-            } else if (normalized.contact) {
-                normalized.author = normalized.contact;
-            }
-        }
-
-        if (row && typeof row === 'object') {
-            assignByToken(normalized, 'id', row, ['id', 'номер', 'ticket']);
-            assignByToken(normalized, 'title', row, ['назван', 'шаблон', 'тема', 'title', 'subject', 'template', 'summary']);
-            assignByToken(normalized, 'description', row, ['описан', 'коммент', 'description', 'detail', 'remarks']);
-            assignByToken(normalized, 'status', row, ['статус', 'status', 'state']);
-            assignByToken(normalized, 'priority', row, ['приоритет', 'priority']);
-            assignByToken(normalized, 'createdAt', row, ['создан', 'дата открытия', 'created', 'registered']);
-            assignByToken(normalized, 'author', row, ['автор', 'инициатор', 'author', 'requester', 'contact']);
+            assignIfEmpty(normalized, 'author', normalized.requester);
+            assignIfEmpty(normalized, 'author', normalized.contact);
         }
         normalized._raw = row;
         normalized._searchBlob = buildSearchBlob(normalized);
         return normalized;
-    }
-
-    var DEFAULT_COLUMN_SEQUENCE = [
-        '',
-        'id',
-        '',
-        '',
-        'title',
-        'description',
-        'status',
-        'contact',
-        'priority',
-        'sla',
-        'dueAt',
-        'createdAt',
-        'requester',
-        'author',
-        '',
-        '',
-        'tags'
-    ];
-
-    function computeFallbackSequence(columns, row) {
-        var columnCount = Array.isArray(columns) && columns.length ? columns.length : 0;
-        if (!columnCount && Array.isArray(row)) {
-            columnCount = row.length;
-        }
-        if (columnCount < 6) {
-            return null;
-        }
-        var recognized = 0;
-        if (Array.isArray(columns) && columns.length) {
-            for (var i = 0; i < columns.length; i += 1) {
-                var canonical = normalizeHeaderKey(columns[i]);
-                if (canonical && mapCanonicalHeader(canonical)) {
-                    recognized += 1;
-                }
-            }
-        }
-        if (recognized >= 4) {
-            return null;
-        }
-        var rowArray = buildRowArraySnapshot(row, columns, columnCount);
-        if (!rowArray.length) {
-            return null;
-        }
-        var idCandidate = rowArray.length > 1 ? rowArray[1] : '';
-        var titleCandidate = rowArray.length > 4 ? rowArray[4] : '';
-        var descriptionCandidate = rowArray.length > 5 ? rowArray[5] : '';
-        if (!isLikelyId(idCandidate)) {
-            return null;
-        }
-        if (!hasMeaningfulText(titleCandidate) || !hasMeaningfulText(descriptionCandidate)) {
-            return null;
-        }
-        var sequence = [];
-        for (var j = 0; j < columnCount && j < DEFAULT_COLUMN_SEQUENCE.length; j += 1) {
-            sequence.push(DEFAULT_COLUMN_SEQUENCE[j]);
-        }
-        return sequence;
-    }
-
-    function buildRowArraySnapshot(row, columns, count) {
-        var snapshot = [];
-        for (var i = 0; i < count; i += 1) {
-            var value = null;
-            if (Array.isArray(row)) {
-                value = row[i];
-            } else if (row && typeof row === 'object') {
-                var key = Array.isArray(columns) && columns.length > i ? columns[i] : null;
-                if (key != null && Object.prototype.hasOwnProperty.call(row, key)) {
-                    value = row[key];
-                } else if (Object.prototype.hasOwnProperty.call(row, String(i))) {
-                    value = row[String(i)];
-                }
-            }
-            snapshot.push(value == null ? '' : value);
-        }
-        return snapshot;
-    }
-
-    function isLikelyId(value) {
-        if (!value) return false;
-        var text = String(value).trim();
-        if (!text) return false;
-        var match = text.match(/[A-Za-zА-Яа-я]{1,5}-\d{3,}/);
-        return Boolean(match);
-    }
-
-    function hasMeaningfulText(value) {
-        if (!value) return false;
-        var text = String(value).trim();
-        if (!text) return false;
-        return text.replace(/[^A-Za-zА-Яа-я0-9]+/g, '').length > 0;
-    }
-
-    function assignByToken(target, key, source, tokenList) {
-        if (target[key]) return;
-        if (!source || typeof source !== 'object') return;
-        for (var originalKey in source) {
-            if (!Object.prototype.hasOwnProperty.call(source, originalKey)) continue;
-            var canonical = normalizeHeaderKey(originalKey);
-            if (!canonical) continue;
-            for (var t = 0; t < tokenList.length; t += 1) {
-                if (canonical.indexOf(tokenList[t]) !== -1) {
-                    var value = source[originalKey];
-                    if (value == null) break;
-                    if (typeof value === 'string') {
-                        var trimmed = value.trim();
-                        if (trimmed) {
-                            target[key] = trimmed;
-                            return;
-                        }
-                    } else {
-                        target[key] = value;
-                        return;
-                    }
-                }
-            }
-        }
     }
 
     var api = {

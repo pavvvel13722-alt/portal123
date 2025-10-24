@@ -10,6 +10,7 @@
     let pendingJob = null;
     const settingsControls = {
         threshold: null,
+        thresholdRange: null,
         smartToggle: null,
         timeGuardToggle: null,
         timeGuardDays: null,
@@ -216,8 +217,11 @@
             if (percent < 0) percent = 0;
             if (percent > 100) percent = 100;
             settingsControls.threshold.value = String(percent);
+            if (settingsControls.thresholdRange) {
+                settingsControls.thresholdRange.value = String(percent);
+            }
             if (settingsHints.threshold) {
-                settingsHints.threshold.textContent = 'Используется, когда авто режим отключен. Текущий порог: ' + percent + '%.';
+                settingsHints.threshold.textContent = 'Этот порог применяется, если авто режим отключён. Сейчас: ' + percent + '%.';
             }
         }
         if (settingsControls.smartToggle) {
@@ -226,7 +230,7 @@
                 const short = settings.thresholdShort != null ? Math.round(settings.thresholdShort * 100) : 0;
                 const medium = settings.thresholdMedium != null ? Math.round(settings.thresholdMedium * 100) : 0;
                 const long = settings.thresholdLong != null ? Math.round(settings.thresholdLong * 100) : 0;
-                settingsHints.smart.textContent = 'Автонастройка: короткие >= ' + short + '%, средние >= ' + medium + '%, длинные >= ' + long + '%.';
+                settingsHints.smart.textContent = 'Авто режим: короткие тексты >= ' + short + '%, средние >= ' + medium + '%, длинные >= ' + long + '%.';
             }
         }
         if (settingsControls.timeGuardToggle) {
@@ -254,6 +258,7 @@
     function buildSettingsUI() {
         if (!settingsContainer) return;
         settingsControls.threshold = null;
+        settingsControls.thresholdRange = null;
         settingsControls.smartToggle = null;
         settingsControls.timeGuardToggle = null;
         settingsControls.timeGuardDays = null;
@@ -266,7 +271,7 @@
         const thresholdCard = document.createElement('div');
         thresholdCard.className = 'setting';
         const thresholdLabel = document.createElement('label');
-        thresholdLabel.textContent = 'Минимальная похожесть, %';
+        thresholdLabel.textContent = 'Ручной порог похожести, %';
         thresholdCard.appendChild(thresholdLabel);
         const thresholdInput = document.createElement('input');
         thresholdInput.type = 'number';
@@ -280,12 +285,31 @@
             if (value > 100) value = 100;
             event.target.value = String(Math.round(value));
             AppCore.updateSetting('duplicates', 'baseThreshold', value / 100);
+            if (settingsControls.thresholdRange) {
+                settingsControls.thresholdRange.value = String(Math.round(value));
+            }
         });
         thresholdCard.appendChild(thresholdInput);
+        const thresholdRange = document.createElement('input');
+        thresholdRange.type = 'range';
+        thresholdRange.min = '0';
+        thresholdRange.max = '100';
+        thresholdRange.step = '1';
+        thresholdRange.className = 'setting__range';
+        thresholdRange.addEventListener('input', function (event) {
+            const value = Number(event.target.value);
+            thresholdInput.value = String(value);
+        });
+        thresholdRange.addEventListener('change', function (event) {
+            const value = Number(event.target.value);
+            AppCore.updateSetting('duplicates', 'baseThreshold', value / 100);
+        });
+        thresholdCard.appendChild(thresholdRange);
         const thresholdHint = document.createElement('p');
         thresholdHint.className = 'setting__hint';
         thresholdCard.appendChild(thresholdHint);
         settingsControls.threshold = thresholdInput;
+        settingsControls.thresholdRange = thresholdRange;
         settingsHints.threshold = thresholdHint;
         settingsContainer.appendChild(thresholdCard);
 
@@ -300,7 +324,7 @@
         });
         smartLabel.appendChild(smartInput);
         const smartText = document.createElement('span');
-        smartText.textContent = 'Автонастройка порога по длине описания';
+        smartText.textContent = 'Авто режим порога по длине описания';
         smartLabel.appendChild(smartText);
         smartCard.appendChild(smartLabel);
         const smartHint = document.createElement('p');
@@ -321,7 +345,7 @@
         });
         guardToggleLabel.appendChild(guardToggle);
         const guardText = document.createElement('span');
-        guardText.textContent = 'Сравнивать обращения, созданные близко по времени';
+        guardText.textContent = 'Учитывать только обращения, созданные рядом по времени';
         guardToggleLabel.appendChild(guardText);
         guardCard.appendChild(guardToggleLabel);
         const guardInline = document.createElement('div');
@@ -414,7 +438,7 @@
             dismissButton.className = 'cluster__dismiss';
             dismissButton.dataset.action = 'dismiss-cluster';
             dismissButton.dataset.cluster = String(clusterIndex);
-            dismissButton.textContent = 'X Удалить группу';
+            dismissButton.textContent = 'X Скрыть группу';
             headerTop.appendChild(dismissButton);
             header.appendChild(headerTop);
 

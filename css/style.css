@@ -216,7 +216,7 @@ body {
     width: min(320px, 100%);
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 16px;
 }
 
 .workspace__main {
@@ -226,38 +226,86 @@ body {
     gap: 24px;
 }
 
-.guide-card {
-    background: var(--bg-card);
-    border-radius: var(--radius-lg);
-    padding: 20px;
-    box-shadow: var(--shadow-soft);
+.info-panel {
     border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    background: var(--bg-card);
+    box-shadow: var(--shadow-soft);
+    padding: 0;
     color: var(--text-secondary);
 }
 
-.guide-card h2,
-.guide-card h3 {
-    margin: 0 0 12px;
+.info-panel summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 16px 20px;
+    font-weight: 600;
     color: var(--text-primary);
-    font-size: 1.1rem;
+    position: relative;
 }
 
-.guide-card p,
-.guide-card ul,
-.guide-card ol {
+.info-panel[open] summary {
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 12px;
+}
+
+.info-panel summary::after {
+    content: '+';
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.info-panel[open] summary::after {
+    content: '-';
+}
+
+.info-panel summary::-webkit-details-marker {
+    display: none;
+}
+
+.info-panel p,
+.info-panel ul,
+.info-panel ol {
     margin: 0;
-    padding-left: 18px;
+    padding: 0 20px 16px;
 }
 
-.guide-card ul,
-.guide-card ol {
+.info-panel ul,
+.info-panel ol {
     display: flex;
     flex-direction: column;
     gap: 8px;
+    padding-left: 28px;
 }
 
-.guide-card--categories {
+.info-panel--solid {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.info-panel__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     gap: 12px;
+    margin-bottom: 12px;
+}
+
+.info-panel__actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.info-panel__hint {
+    margin: 0 0 16px;
+    color: var(--text-muted);
 }
 
 .guide-card__header {
@@ -408,6 +456,47 @@ body {
     transition: border-color var(--transition), box-shadow var(--transition);
 }
 
+.setting__range {
+    padding: 0;
+    margin: 0;
+    margin-top: 4px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--border-color);
+    border: none;
+    cursor: pointer;
+}
+
+.setting__range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--bg-primary);
+    border: none;
+    box-shadow: 0 0 0 3px rgba(45, 91, 255, 0.25);
+    transition: transform var(--transition);
+}
+
+.setting__range::-webkit-slider-thumb:hover {
+    transform: scale(1.1);
+}
+
+.setting__range::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--bg-primary);
+    border: none;
+    box-shadow: 0 0 0 3px rgba(45, 91, 255, 0.25);
+    transition: transform var(--transition);
+}
+
+.setting__range::-moz-range-thumb:hover {
+    transform: scale(1.1);
+}
+
 .setting input:focus,
 .setting textarea:focus {
     border-color: var(--bg-primary);
@@ -501,6 +590,9 @@ body {
     background: transparent;
     color: var(--text-secondary);
     padding: 6px 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     cursor: pointer;
     transition: background var(--transition), color var(--transition), border-color var(--transition);
 }

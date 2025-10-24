@@ -1,4 +1,19 @@
 (function (global) {
+    var PapaParser = null;
+    if (global && global.Papa) {
+        PapaParser = global.Papa;
+    } else if (typeof require === 'function') {
+        try {
+            PapaParser = require('./vendor/papaparse.min.js');
+        } catch (err) {
+            try {
+                PapaParser = require('../js/vendor/papaparse.min.js');
+            } catch (errNested) {
+                PapaParser = null;
+            }
+        }
+    }
+
     var HEADER_KEY_MAP = {
         'id': 'id',
         'номер обращения': 'id',
@@ -267,6 +282,32 @@
         return score;
     }
 
+    function parseCsvWithPapa(text, delimiter) {
+        if (!PapaParser) return null;
+        if (!text) {
+            return { data: [], meta: { fields: [] } };
+        }
+        try {
+            var result = PapaParser.parse(text, {
+                delimiter: delimiter,
+                header: true,
+                skipEmptyLines: 'greedy',
+                transformHeader: function (header) {
+                    if (header == null) return '';
+                    return String(header).trim();
+                }
+            });
+            if (!result || !result.meta) {
+                return null;
+            }
+            var fields = Array.isArray(result.meta.fields) ? result.meta.fields : [];
+            var data = Array.isArray(result.data) ? result.data : [];
+            return { data: data, meta: { fields: fields } };
+        } catch (err) {
+            return null;
+        }
+    }
+
     function autoParseCsv(text, options) {
         var input = text == null ? '' : String(text);
         if (!input) {
@@ -278,22 +319,44 @@
             : [';', '\t', ',', '|'];
         var best = null;
         var bestScore = -Infinity;
-        for (var i = 0; i < delimiterList.length; i += 1) {
-            var delimiter = delimiterList[i];
-            var parsed;
-            try {
-                parsed = parseCsv(input, { delimiter: delimiter, header: true, skipEmptyLines: true });
-            } catch (err) {
-                parsed = null;
-            }
+
+        function considerResult(parsed, delimiter) {
+            if (!parsed) return;
             var score = scoreParseResult(parsed, delimiter);
-            if (score > bestScore && parsed) {
+            if (score > bestScore) {
                 bestScore = score;
-                best = { data: parsed.data || [], meta: parsed.meta || { fields: [] }, delimiter: delimiter };
+                best = {
+                    data: parsed.data || [],
+                    meta: parsed.meta || { fields: [] },
+                    delimiter: delimiter
+                };
             }
         }
+
+        for (var i = 0; i < delimiterList.length; i += 1) {
+            var delimiter = delimiterList[i];
+            var manual = null;
+            try {
+                manual = parseCsv(input, { delimiter: delimiter, header: true, skipEmptyLines: true });
+            } catch (errManual) {
+                manual = null;
+            }
+            considerResult(manual, delimiter);
+            var papa = parseCsvWithPapa(input, delimiter);
+            considerResult(papa, delimiter);
+        }
+
         if (!best) {
             best = { data: [], meta: { fields: [] }, delimiter: delimiterList[0] };
+        } else if (best.meta && Array.isArray(best.meta.fields) && best.meta.fields.length <= 1) {
+            var fallback = parseCsvWithPapa(input, ';');
+            if (fallback && fallback.meta && Array.isArray(fallback.meta.fields) && fallback.meta.fields.length > 1) {
+                best = {
+                    data: fallback.data || [],
+                    meta: fallback.meta || { fields: [] },
+                    delimiter: ';'
+                };
+            }
         }
         return best;
     }

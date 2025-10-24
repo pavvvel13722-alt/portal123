@@ -174,6 +174,8 @@
         setupTabs();
         setupFileUpload();
         setupThemeToggle();
+        setupCollapsibleCards();
+        setupHelpPanels();
         document.dispatchEvent(new CustomEvent('app:ready', { detail: { settings: state.settings } }));
     }
 
@@ -263,6 +265,95 @@
         const isDark = theme === 'dark';
         button.textContent = isDark ? 'Светлая тема' : 'Тёмная тема';
         button.setAttribute('aria-pressed', String(isDark));
+    }
+
+    function setupCollapsibleCards() {
+        const panels = document.querySelectorAll('.section-card--collapsible[data-panel-id]');
+        Array.prototype.forEach.call(panels, function (panel) {
+            const panelId = panel.getAttribute('data-panel-id');
+            const initial = panel.getAttribute('data-open') === 'true';
+            applyPanelState(panelId, initial);
+        });
+        const toggles = document.querySelectorAll('[data-panel-toggle]');
+        Array.prototype.forEach.call(toggles, function (button) {
+            button.addEventListener('click', function () {
+                const target = button.getAttribute('data-panel-toggle');
+                if (!target) return;
+                const panel = document.querySelector('[data-panel-id="' + target + '"]');
+                const isOpen = panel && panel.getAttribute('data-open') === 'true';
+                applyPanelState(target, !isOpen);
+            });
+        });
+    }
+
+    function applyPanelState(panelId, open) {
+        const panel = document.querySelector('[data-panel-id="' + panelId + '"]');
+        if (!panel) return;
+        const next = !!open;
+        panel.setAttribute('data-open', next ? 'true' : 'false');
+        const body = panel.querySelector('.section-card__body');
+        if (body) body.hidden = !next;
+        const footer = panel.querySelector('.section-card__footer');
+        if (footer) footer.hidden = !next;
+        const openLabel = panel.getAttribute('data-open-label') || 'Скрыть';
+        const closeLabel = panel.getAttribute('data-close-label') || 'Показать';
+        const toggles = document.querySelectorAll('[data-panel-toggle="' + panelId + '"]');
+        Array.prototype.forEach.call(toggles, function (button) {
+            button.setAttribute('aria-expanded', next ? 'true' : 'false');
+            button.textContent = next ? openLabel : closeLabel;
+        });
+    }
+
+    function setupHelpPanels() {
+        const overlays = document.querySelectorAll('.help-overlay');
+        Array.prototype.forEach.call(overlays, function (overlay) {
+            overlay.hidden = true;
+            overlay.classList.remove('is-open');
+            overlay.addEventListener('click', function (event) {
+                if (event.target === overlay) {
+                    closeHelpOverlay(overlay);
+                }
+            });
+        });
+        const openers = document.querySelectorAll('[data-help-open]');
+        Array.prototype.forEach.call(openers, function (button) {
+            button.addEventListener('click', function () {
+                const key = button.getAttribute('data-help-open');
+                if (key) openHelpOverlay(key);
+            });
+        });
+        const closers = document.querySelectorAll('[data-help-close]');
+        Array.prototype.forEach.call(closers, function (button) {
+            button.addEventListener('click', function () {
+                const overlay = button.closest('.help-overlay');
+                if (overlay) {
+                    closeHelpOverlay(overlay);
+                }
+            });
+        });
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') {
+                Array.prototype.forEach.call(document.querySelectorAll('.help-overlay.is-open'), function (overlay) {
+                    closeHelpOverlay(overlay);
+                });
+            }
+        });
+    }
+
+    function openHelpOverlay(key) {
+        Array.prototype.forEach.call(document.querySelectorAll('.help-overlay.is-open'), function (overlay) {
+            closeHelpOverlay(overlay);
+        });
+        const overlay = document.querySelector('.help-overlay[data-help="' + key + '"]');
+        if (!overlay) return;
+        overlay.hidden = false;
+        overlay.classList.add('is-open');
+    }
+
+    function closeHelpOverlay(overlay) {
+        if (!overlay) return;
+        overlay.classList.remove('is-open');
+        overlay.hidden = true;
     }
 
     function toggleButtons(enabled) {

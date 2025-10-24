@@ -438,7 +438,7 @@
             dismissButton.className = 'cluster__dismiss';
             dismissButton.dataset.action = 'dismiss-cluster';
             dismissButton.dataset.cluster = String(clusterIndex);
-            dismissButton.textContent = 'X Скрыть группу';
+            dismissButton.textContent = 'Скрыть группу';
             headerTop.appendChild(dismissButton);
             header.appendChild(headerTop);
 

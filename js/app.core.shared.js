@@ -130,7 +130,6 @@
         var skipEmptyLines = Boolean(opts.skipEmptyLines);
         var header = Boolean(opts.header);
         var papa = getPapaParser();
-        var papaResult = null;
         if (papa) {
             try {
                 var result = papa.parse(text, {
@@ -138,32 +137,43 @@
                     skipEmptyLines: skipEmptyLines,
                     header: header
                 });
-                if (result && result.data) {
+                if (result && result.data && result.data.length) {
                     if (!header) {
-                        papaResult = { data: result.data, meta: { fields: null } };
-                    } else {
-                        var fields = [];
-                        if (result.meta && Array.isArray(result.meta.fields) && result.meta.fields.length) {
-                            fields = result.meta.fields.slice();
-                        } else if (result.data.length) {
-                            var sampleRow = result.data[0];
-                            for (var sampleKey in sampleRow) {
-                                if (Object.prototype.hasOwnProperty.call(sampleRow, sampleKey)) {
-                                    fields.push(sampleKey);
+                        if (!Array.isArray(result.data[0])) {
+                            var firstField = result.data[0];
+                            if (firstField && typeof firstField === 'object') {
+                                var soleKey = Object.keys(firstField)[0];
+                                if (soleKey && typeof firstField[soleKey] === 'string' && firstField[soleKey].indexOf(delimiter) !== -1) {
+                                    throw new Error('PapaParse produced unsplit rows');
                                 }
                             }
                         }
-                        var normalizedRows = result.data.map(function (row) {
-                            var entry = {};
-                            for (var index = 0; index < fields.length; index += 1) {
-                                var key = fields[index];
-                                var value = row[key];
-                                entry[key] = typeof value === 'string' ? value.trim() : value;
-                            }
-                            return entry;
-                        });
-                        papaResult = { data: normalizedRows, meta: { fields: fields } };
+                        return { data: result.data, meta: { fields: null } };
                     }
+                    var fields = [];
+                    if (result.meta && Array.isArray(result.meta.fields) && result.meta.fields.length) {
+                        fields = result.meta.fields.slice();
+                    } else {
+                        var firstRow = result.data[0];
+                        for (var prop in firstRow) {
+                            if (Object.prototype.hasOwnProperty.call(firstRow, prop)) {
+                                fields.push(prop);
+                            }
+                        }
+                    }
+                    if (fields.length <= 1) {
+                        throw new Error('PapaParse header collapsed into single column');
+                    }
+                    var normalizedRows = result.data.map(function (row) {
+                        var entry = {};
+                        for (var index = 0; index < fields.length; index += 1) {
+                            var key = fields[index];
+                            var value = row[key];
+                            entry[key] = typeof value === 'string' ? value.trim() : value;
+                        }
+                        return entry;
+                    });
+                    return { data: normalizedRows, meta: { fields: fields } };
                 }
             } catch (errPapa) {
                 if (typeof console !== 'undefined' && console && typeof console.warn === 'function') {
@@ -171,43 +181,7 @@
                 }
             }
         }
-
-        var manualResult = parseCsvManual(text, delimiter, header, skipEmptyLines);
-        if (!papaResult) {
-            return manualResult;
-        }
-
-        var papaQuality = evaluateCsvQuality(papaResult);
-        var manualQuality = evaluateCsvQuality(manualResult);
-        if (papaQuality.score > manualQuality.score) {
-            return papaResult;
-        }
-        return manualResult;
-    }
-
-    function evaluateCsvQuality(result) {
-        if (!result || !result.data) {
-            return { rows: 0, fields: 0, score: 0 };
-        }
-        var rowsCount = result.data.length;
-        var fieldsCount = 0;
-        if (result.meta && Array.isArray(result.meta.fields)) {
-            fieldsCount = result.meta.fields.length;
-        }
-        if (!fieldsCount && rowsCount) {
-            var firstRow = result.data[0];
-            if (Array.isArray(firstRow)) {
-                fieldsCount = firstRow.length;
-            } else if (firstRow && typeof firstRow === 'object') {
-                for (var key in firstRow) {
-                    if (Object.prototype.hasOwnProperty.call(firstRow, key)) {
-                        fieldsCount += 1;
-                    }
-                }
-            }
-        }
-        var score = fieldsCount * 1000000 + rowsCount;
-        return { rows: rowsCount, fields: fieldsCount, score: score };
+        return parseCsvManual(text, delimiter, header, skipEmptyLines);
     }
 
     function parseCsvManual(text, delimiter, header, skipEmptyLines) {
@@ -296,7 +270,7 @@
         var bestScore = -Infinity;
         for (var i = 0; i < candidates.length; i += 1) {
             var delimiter = candidates[i];
-            var parsed = parseCsv(sample, { delimiter: delimiter, header: false, skipEmptyLines: true });
+            var parsed = parseCsvManual(sample, delimiter, false, true);
             if (!parsed.data || !parsed.data.length) continue;
             var lengths = parsed.data
                 .map(function (row) {

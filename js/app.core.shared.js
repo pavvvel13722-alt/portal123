@@ -210,6 +210,65 @@
         return parseCsvManual(text, delimiter, header, skipEmptyLines);
     }
 
+    function looksLikeRowStart(text, startIndex, delimiter, delimiterLength) {
+        var index = startIndex;
+        var limit = Math.min(text.length, index + 128);
+        var sample = '';
+        while (index < limit) {
+            var ch = text.charAt(index);
+            if (ch === '\r' || ch === '\n') {
+                break;
+            }
+            sample += ch;
+            index += 1;
+        }
+        if (!sample) {
+            return false;
+        }
+        sample = sample.replace(/^[ \t]+/, '');
+        if (!sample) {
+            return false;
+        }
+        var delimiterIndex;
+        if (delimiterLength === 1) {
+            delimiterIndex = sample.indexOf(delimiter);
+        } else {
+            delimiterIndex = sample.indexOf(delimiter);
+        }
+        if (delimiterIndex === -1 || delimiterIndex > 64) {
+            return false;
+        }
+        var prefix = sample.slice(0, delimiterIndex);
+        if (!prefix) {
+            return false;
+        }
+        if (!/^[0-9a-zA-Zа-яА-Я_ \-\[\]\(\)#\/]+$/.test(prefix)) {
+            return false;
+        }
+        return true;
+    }
+
+    function shouldForceCloseQuote(text, position, delimiter, delimiterLength) {
+        var index = position + 1;
+        if (text.charAt(position) === '\r' && text.charAt(index) === '\n') {
+            index += 1;
+        }
+        while (index < text.length) {
+            var ch = text.charAt(index);
+            if (ch !== ' ' && ch !== '\t') {
+                break;
+            }
+            index += 1;
+        }
+        if (index >= text.length) {
+            return true;
+        }
+        if (looksLikeRowStart(text, index, delimiter, delimiterLength)) {
+            return true;
+        }
+        return false;
+    }
+
     function parseCsvManual(text, delimiter, header, skipEmptyLines) {
         var rows = [];
         var delimiterLength = delimiter.length;
@@ -285,6 +344,20 @@
                 } else {
                     field += '"';
                     fieldOnlyWhitespace = false;
+                }
+                continue;
+            }
+            if ((char === '\n' || char === '\r') && inQuotes) {
+                if (!shouldForceCloseQuote(text, index, delimiter, delimiterLength)) {
+                    field += char;
+                    fieldOnlyWhitespace = false;
+                    continue;
+                }
+                inQuotes = false;
+                pushField();
+                pushRow();
+                if (char === '\r' && text[index + 1] === '\n') {
+                    index += 1;
                 }
                 continue;
             }

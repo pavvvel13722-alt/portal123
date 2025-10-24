@@ -162,6 +162,32 @@
                         }
                     }
                     if (fields.length <= 1) {
+                        var arrayResult = papa.parse(text, {
+                            delimiter: delimiter,
+                            skipEmptyLines: skipEmptyLines,
+                            header: false
+                        });
+                        if (arrayResult && Array.isArray(arrayResult.data) && arrayResult.data.length > 1 && Array.isArray(arrayResult.data[0])) {
+                            var headerRow = arrayResult.data[0].map(function (cell) {
+                                return cell == null ? '' : String(cell).trim();
+                            });
+                            var rebuiltRows = [];
+                            for (var r = 1; r < arrayResult.data.length; r += 1) {
+                                var rowArray = arrayResult.data[r];
+                                if (!rowArray || !rowArray.length) continue;
+                                var entry = {};
+                                for (var c = 0; c < headerRow.length; c += 1) {
+                                    var headerKey = headerRow[c];
+                                    if (!headerKey) continue;
+                                    var cellValue = rowArray[c];
+                                    entry[headerKey] = typeof cellValue === 'string' ? cellValue.trim() : cellValue;
+                                }
+                                rebuiltRows.push(entry);
+                            }
+                            if (headerRow.length > 1 && rebuiltRows.length) {
+                                return { data: rebuiltRows, meta: { fields: headerRow } };
+                            }
+                        }
                         throw new Error('PapaParse header collapsed into single column');
                     }
                     var normalizedRows = result.data.map(function (row) {

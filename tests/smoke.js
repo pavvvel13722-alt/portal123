@@ -14,7 +14,7 @@ const CoreShared = require('../js/app.core.shared.js');
 
 const csvPath = path.join(__dirname, '..', 'tickets_sample_100_same_author.csv');
 const csvText = fs.readFileSync(csvPath, 'utf8');
-const parsed = CoreShared.parseCsv(csvText, { delimiter: ';', header: true, skipEmptyLines: true });
+const parsed = CoreShared.autoParseCsv(csvText);
 const records = parsed.data.map(function (row) {
     return CoreShared.normalizeRow(row, parsed.meta.fields);
 });

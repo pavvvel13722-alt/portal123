@@ -227,6 +227,77 @@
         return { data: dataRows, meta: { fields: headers } };
     }
 
+    function scoreParseResult(parsed, delimiter) {
+        if (!parsed) return -Infinity;
+        var fields = parsed.meta && Array.isArray(parsed.meta.fields) ? parsed.meta.fields : [];
+        var data = Array.isArray(parsed.data) ? parsed.data : [];
+        var fieldCount = fields.length;
+        var lengths = [];
+        for (var i = 0; i < data.length; i += 1) {
+            var row = data[i];
+            if (row && typeof row === 'object') {
+                lengths.push(Object.keys(row).length);
+            }
+        }
+        var stats = getLengthStats(lengths);
+        var collapsedHeader = false;
+        if (fieldCount <= 1 && fields.length) {
+            var headerText = String(fields[0] == null ? '' : fields[0]);
+            for (var j = 0; j < headerText.length; j += 1) {
+                var ch = headerText.charAt(j);
+                if (ch === ';' || ch === ',' || ch === '\t' || ch === '|') {
+                    collapsedHeader = true;
+                    break;
+                }
+            }
+        }
+        var consistent = stats.consistency || 0;
+        var score = 0;
+        if (fieldCount > 1) {
+            score += fieldCount * 1000;
+        }
+        score += data.length;
+        score += consistent * 100;
+        if (collapsedHeader) {
+            score -= 5000;
+        }
+        if (delimiter === ';') {
+            score += 25;
+        }
+        return score;
+    }
+
+    function autoParseCsv(text, options) {
+        var input = text == null ? '' : String(text);
+        if (!input) {
+            return { data: [], meta: { fields: [] }, delimiter: ';' };
+        }
+        var opts = options || {};
+        var delimiterList = Array.isArray(opts.delimiters) && opts.delimiters.length
+            ? opts.delimiters.slice()
+            : [';', '\t', ',', '|'];
+        var best = null;
+        var bestScore = -Infinity;
+        for (var i = 0; i < delimiterList.length; i += 1) {
+            var delimiter = delimiterList[i];
+            var parsed;
+            try {
+                parsed = parseCsv(input, { delimiter: delimiter, header: true, skipEmptyLines: true });
+            } catch (err) {
+                parsed = null;
+            }
+            var score = scoreParseResult(parsed, delimiter);
+            if (score > bestScore && parsed) {
+                bestScore = score;
+                best = { data: parsed.data || [], meta: parsed.meta || { fields: [] }, delimiter: delimiter };
+            }
+        }
+        if (!best) {
+            best = { data: [], meta: { fields: [] }, delimiter: delimiterList[0] };
+        }
+        return best;
+    }
+
     function detectDelimiter(text) {
         if (!text) {
             return ';';
@@ -452,6 +523,7 @@
         extractSample: extractSample,
         getLengthStats: getLengthStats,
         parseCsv: parseCsv,
+        autoParseCsv: autoParseCsv,
         detectDelimiter: detectDelimiter,
         normalizeHeaderKey: normalizeHeaderKey,
         mapCanonicalHeader: mapCanonicalHeader,

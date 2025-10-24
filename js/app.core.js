@@ -208,9 +208,8 @@
             info.textContent = 'Загружается...';
             try {
                 const text = await readFileAsText(file);
-                const delimiter = Shared.detectDelimiter(text);
-                const parsed = Shared.parseCsv(text, { delimiter: delimiter, header: true, skipEmptyLines: true });
-                const columns = parsed.meta.fields || [];
+                const parsed = Shared.autoParseCsv(text);
+                const columns = parsed.meta && parsed.meta.fields ? parsed.meta.fields : [];
                 const cleaned = (parsed.data || [])
                     .filter(Boolean)
                     .map(function (row) { return Shared.normalizeRow(row, columns); });

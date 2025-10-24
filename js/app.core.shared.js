@@ -547,8 +547,12 @@
     function normalizeRow(row, columns) {
         var normalized = {};
         var seenKeys = {};
-        for (var i = 0; i < columns.length; i += 1) {
-            var column = columns[i];
+        var columnList = Array.isArray(columns) && columns.length ? columns.slice() : [];
+        if (!columnList.length && row && typeof row === 'object') {
+            columnList = Object.keys(row);
+        }
+        for (var i = 0; i < columnList.length; i += 1) {
+            var column = columnList[i];
             var canonical = normalizeHeaderKey(column);
             if (!canonical) continue;
             var key = mapCanonicalHeader(canonical);
@@ -557,6 +561,19 @@
             var rawValue = row[column];
             var cleaned = typeof rawValue === 'string' ? rawValue.trim() : rawValue;
             normalized[key] = cleaned != null ? cleaned : '';
+        }
+        if (row && typeof row === 'object') {
+            for (var originalKey in row) {
+                if (!Object.prototype.hasOwnProperty.call(row, originalKey)) continue;
+                var mapped = normalizeHeaderKey(originalKey);
+                if (!mapped) continue;
+                var targetKey = mapCanonicalHeader(mapped);
+                if (!targetKey || seenKeys[targetKey]) continue;
+                seenKeys[targetKey] = true;
+                var originalValue = row[originalKey];
+                var trimmedValue = typeof originalValue === 'string' ? originalValue.trim() : originalValue;
+                normalized[targetKey] = trimmedValue != null ? trimmedValue : '';
+            }
         }
         normalized.title = normalized.title || '';
         normalized.description = normalized.description || '';

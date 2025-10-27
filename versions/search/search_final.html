@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Поиск по обращениям (готовая версия)</title>
+    <link rel="stylesheet" href="../../css/style.css">
+</head>
+<body>
+    <div class="page">
+        <header class="page__header">
+            <div class="page__title">
+                <h1>Портал обработки обращений</h1>
+                <p class="page__subtitle">Готовая вкладка для интеллектуального поиска обращений.</p>
+            </div>
+            <div class="page__header-actions">
+                <div class="upload">
+                    <label for="csv-file" class="upload__label">Загрузить CSV (UTF-8 BOM)</label>
+                    <input type="file" id="csv-file" accept=".csv">
+                    <span id="upload-info" class="upload__info">Файл не загружен</span>
+                </div>
+                <button id="theme-toggle" class="button button--ghost" type="button">Тёмная тема</button>
+            </div>
+        </header>
+        <nav class="tabs" role="tablist">
+            <button class="tabs__tab tabs__tab--active" data-tab="search" role="tab" aria-selected="true">Поиск по обращениям</button>
+        </nav>
+        <main class="tabs-body">
+            <section id="tab-search" class="tab-panel tab-panel--active" role="tabpanel" aria-labelledby="search">
+                <div class="tab-toolbar">
+                    <div class="tab-toolbar__text">
+                        <h2>Поиск по обращениям</h2>
+                    </div>
+                    <div class="tab-toolbar__actions">
+                        <button id="btn-run-search" class="button button--primary" type="button" disabled>Найти</button>
+                        <button type="button" class="button button--ghost" data-help-open="search">Справка</button>
+                    </div>
+                </div>
+                <div class="layout-grid">
+                    <section class="section-card layout-grid__main">
+                        <div class="section-card__header">
+                            <h3>Запрос и фильтры</h3>
+                        </div>
+                        <div class="section-card__body">
+                            <div class="search-form">
+                                <div class="search-form__row search-form__row--main">
+                                    <div class="search-form__input-wrap">
+                                        <input type="text" id="search-query" placeholder="Например: ошибка vrm" autocomplete="off">
+                                    </div>
+                                    <div class="search-form__row search-form__row--actions search-form__row--inline">
+                                        <button id="btn-reset-filters" class="button button--ghost" type="button">Сбросить фильтры</button>
+                                        <button id="btn-export-search" class="button" type="button" disabled>Экспорт CSV</button>
+                                    </div>
+                                </div>
+                                <div id="search-keywords" class="chips"><span class="chip">Нет ключевых слов</span></div>
+                                <div class="search-form__row search-form__row--filters">
+                                    <label class="filter">
+                                        <span>Статус</span>
+                                        <div class="multi-select" data-multi="filter-status">
+                                            <button type="button" class="multi-select__trigger" aria-haspopup="listbox" aria-expanded="false">
+                                                <span class="multi-select__label">Все статусы</span>
+                                                <span class="multi-select__icon">▼</span>
+                                            </button>
+                                            <div class="multi-select__dropdown" role="listbox" hidden></div>
+                                        </div>
+                                        <input type="hidden" id="filter-status" value="">
+                                    </label>
+                                    <label class="filter">
+                                        <span>Приоритет</span>
+                                        <div class="multi-select" data-multi="filter-priority">
+                                            <button type="button" class="multi-select__trigger" aria-haspopup="listbox" aria-expanded="false">
+                                                <span class="multi-select__label">Все приоритеты</span>
+                                                <span class="multi-select__icon">▼</span>
+                                            </button>
+                                            <div class="multi-select__dropdown" role="listbox" hidden></div>
+                                        </div>
+                                        <input type="hidden" id="filter-priority" value="">
+                                    </label>
+                                </div>
+                                <div class="search-form__row search-form__row--summary">
+                                    <div id="search-result-count" class="search-result-count">Найдено: 0</div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                    <section class="section-card section-card--collapsible layout-grid__side" data-panel-id="search-categories" data-close-label="Показать категории" data-open-label="Скрыть категории" data-open="true">
+                        <div class="section-card__header section-card__header--inline">
+                            <div>
+                                <h3>Категории поиска</h3>
+                            </div>
+                            <button type="button" class="section-card__toggle button button--ghost" data-panel-toggle="search-categories" aria-expanded="true">Скрыть категории</button>
+                        </div>
+                        <div class="section-card__body section-card__body--gap">
+                            <div class="section-card__actions section-card__actions--stack">
+                                <button id="btn-import-categories" class="button button--ghost" type="button">Импорт</button>
+                                <button id="btn-export-categories" class="button button--ghost" type="button">Экспорт</button>
+                                <button id="btn-add-category" class="button button--primary" type="button">Новая категория</button>
+                            </div>
+                            <ul id="category-list" class="category-list"></ul>
+                            <input type="file" id="category-import-input" accept="application/json" hidden>
+                        </div>
+                    </section>
+                </div>
+                <section class="section-card section-card--results">
+                    <div class="section-card__header">
+                        <h3>Результаты поиска</h3>
+                    </div>
+                    <div id="search-results" class="results"></div>
+                </section>
+            </section>
+        </main>
+    </div>
+    <div class="help-overlay" data-help="search" hidden>
+        <div class="help-overlay__backdrop" data-help-close></div>
+        <div class="help-overlay__dialog">
+            <header class="help-overlay__header">
+                <h3>Справка по поиску</h3>
+                <button type="button" class="help-overlay__close" data-help-close aria-label="Закрыть">Закрыть</button>
+            </header>
+            <div class="help-overlay__body">
+                <p>Запрос анализируется по автору и описанию, а категории помогают быстро отфильтровать типовые ситуации.</p>
+            </div>
+        </div>
+    </div>
+    <div class="modal" id="category-modal" aria-hidden="true" role="dialog" aria-modal="true">
+        <div class="modal__backdrop" data-modal-close></div>
+        <div class="modal__dialog">
+            <header class="modal__header">
+                <h3 id="category-modal-title">Категория</h3>
+                <button class="modal__close" type="button" data-modal-close aria-label="Закрыть">Закрыть</button>
+            </header>
+            <div class="modal__body">
+                <form id="category-form" class="form">
+                    <label class="form__field">
+                        <span>Название</span>
+                        <input type="text" id="category-name" required>
+                    </label>
+                    <label class="form__field">
+                        <span>Ключевые слова (по одному на строку)</span>
+                        <textarea id="category-keywords" rows="5"></textarea>
+                    </label>
+                    <label class="form__field">
+                        <span>Порог срабатывания</span>
+                        <input type="number" id="category-threshold" min="0" step="1" value="5">
+                    </label>
+                    <div class="form__actions">
+                        <button type="submit" class="button button--primary">Сохранить</button>
+                        <button type="button" class="button button--ghost" data-modal-close>Отмена</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div hidden>
+        <button id="btn-run-duplicates" type="button"></button>
+        <button id="btn-export-duplicates" type="button"></button>
+        <button id="btn-run-tags" type="button"></button>
+        <button id="btn-export-tags-csv" type="button"></button>
+        <button id="btn-export-tags-json" type="button"></button>
+    </div>
+    <script src="../../js/vendor/papaparse.min.js"></script>
+    <script src="../../js/vendor/flexsearch.min.js"></script>
+    <script src="../../js/app.core.shared.js"></script>
+    <script src="../../js/app.core.js"></script>
+    <script src="../../js/app.search.js"></script>
+</body>
+</html>

@@ -427,6 +427,20 @@
         summary.appendChild(summaryGroups);
         fragment.appendChild(summary);
 
+        function appendDetailRow(container, label, value) {
+            const row = document.createElement('div');
+            row.className = 'record__detail';
+            const labelSpan = document.createElement('span');
+            labelSpan.className = 'record__detail-label';
+            labelSpan.textContent = label;
+            row.appendChild(labelSpan);
+            const valueSpan = document.createElement('span');
+            valueSpan.className = 'record__detail-value';
+            valueSpan.textContent = value && value !== '' ? value : '-';
+            row.appendChild(valueSpan);
+            container.appendChild(row);
+        }
+
         clusters.forEach(function (cluster, clusterIndex) {
             const wrapper = document.createElement('div');
             wrapper.className = 'cluster';
@@ -502,6 +516,24 @@
                 link.rel = 'noopener noreferrer';
                 link.textContent = recordId || '-';
                 titleWrap.appendChild(link);
+                const inlineMeta = document.createElement('div');
+                inlineMeta.className = 'record__inline-meta';
+                let inlineMetaCount = 0;
+                if (record.createdAt && record.createdAt !== '') {
+                    const dateChip = document.createElement('span');
+                    dateChip.textContent = record.createdAt;
+                    inlineMeta.appendChild(dateChip);
+                    inlineMetaCount += 1;
+                }
+                if (record.sla && record.sla !== '') {
+                    const slaChip = document.createElement('span');
+                    slaChip.textContent = 'SLA: ' + record.sla;
+                    inlineMeta.appendChild(slaChip);
+                    inlineMetaCount += 1;
+                }
+                if (inlineMetaCount) {
+                    titleWrap.appendChild(inlineMeta);
+                }
                 fieldId.appendChild(titleWrap);
                 const snippet = document.createElement('div');
                 snippet.className = 'record__snippet';
@@ -509,38 +541,12 @@
                 fieldId.appendChild(snippet);
                 row.appendChild(fieldId);
 
-                const fieldAuthor = document.createElement('div');
-                fieldAuthor.className = 'record__field';
-                const authorSpan = document.createElement('span');
-                authorSpan.textContent = record.author || '-';
-                fieldAuthor.appendChild(authorSpan);
-                const role = document.createElement('span');
-                role.className = 'record__meta';
-                role.textContent = record.isPrimary ? 'Основное обращение' : 'Дубль основного';
-                fieldAuthor.appendChild(role);
-                row.appendChild(fieldAuthor);
-
-                const fieldPriority = document.createElement('div');
-                fieldPriority.className = 'record__field';
-                const prioritySpan = document.createElement('span');
-                prioritySpan.textContent = record.priority || '-';
-                fieldPriority.appendChild(prioritySpan);
-                const slaSpan = document.createElement('span');
-                slaSpan.className = 'record__meta';
-                slaSpan.textContent = record.sla ? 'SLA: ' + record.sla : '';
-                fieldPriority.appendChild(slaSpan);
-                row.appendChild(fieldPriority);
-
-                const fieldDate = document.createElement('div');
-                fieldDate.className = 'record__field';
-                const dateSpan = document.createElement('span');
-                dateSpan.textContent = record.createdAt || '-';
-                fieldDate.appendChild(dateSpan);
-                const statusSpan = document.createElement('span');
-                statusSpan.className = 'record__meta';
-                statusSpan.textContent = record.status || '';
-                fieldDate.appendChild(statusSpan);
-                row.appendChild(fieldDate);
+                const fieldDetails = document.createElement('div');
+                fieldDetails.className = 'record__field record__details';
+                appendDetailRow(fieldDetails, 'Роль', record.isPrimary ? 'Основное обращение' : 'Дубль основного');
+                appendDetailRow(fieldDetails, 'Приоритет', record.priority || '');
+                appendDetailRow(fieldDetails, 'Статус', record.status || '');
+                row.appendChild(fieldDetails);
 
                 const fieldSimilarity = document.createElement('div');
                 fieldSimilarity.className = 'record__field';

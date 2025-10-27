@@ -582,7 +582,7 @@
                             if (cursor < start) {
                                 result += escapeHtml(base.slice(cursor, start));
                             }
-                            result += '<mark>' + escapeHtml(base.slice(start, end)) + '</mark>';
+                            result += '<mark class="highlight">' + escapeHtml(base.slice(start, end)) + '</mark>';
                             cursor = end;
                         }
                         if (cursor < base.length) {

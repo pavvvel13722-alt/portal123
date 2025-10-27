@@ -724,7 +724,7 @@ a:focus {
 .record {
     display: grid;
     gap: 16px;
-    grid-template-columns: 2fr 1fr 1fr 1fr minmax(160px, 1fr);
+    grid-template-columns: minmax(0, 3fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(150px, auto);
     padding: 18px 20px;
     border-top: 1px solid var(--border-color);
     align-items: flex-start;
@@ -757,6 +757,7 @@ a:focus {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-wrap: wrap;
 }
 
 .record__badge {
@@ -775,6 +776,17 @@ a:focus {
     font-size: 0.9rem;
     color: var(--text-secondary);
     overflow-wrap: anywhere;
+}
+
+.record__inline-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.record__inline-meta span {
+    font-size: 0.75rem;
+    color: var(--text-muted);
 }
 
 .record__snippet mark,
@@ -813,6 +825,28 @@ a:focus {
 .record__actions button:hover:not([disabled]) {
     background: var(--bg-ghost-hover);
     border-color: var(--border-strong);
+}
+
+.record__details {
+    gap: 12px;
+}
+
+.record__detail {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.record__detail-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+}
+
+.record__detail-value {
+    font-weight: 600;
+    color: var(--text-primary);
 }
 
 .search-form {

@@ -66,9 +66,12 @@
     function setupFilters() {
         templateSelect = createMultiSelect('tag-filter-template', 'Все шаблоны');
         statusSelect = createMultiSelect('tag-filter-status', 'Решено, Выполнено');
-        document.getElementById('tag-min-frequency').value = '3';
-        document.getElementById('tag-min-token').value = '2';
-        document.getElementById('tag-top-n').value = '25';
+        var freqInput = document.getElementById('tag-min-frequency');
+        if (freqInput) freqInput.value = '3';
+        var tokenInput = document.getElementById('tag-min-token-length');
+        if (tokenInput) tokenInput.value = '2';
+        var topInput = document.getElementById('tag-top-n');
+        if (topInput) topInput.value = '25';
     }
 
     function populateFilters() {
@@ -131,12 +134,15 @@
     }
 
     function gatherParams() {
-        const minFrequency = Number(document.getElementById('tag-min-frequency').value) || 3;
-        const minTokenLength = Number(document.getElementById('tag-min-token').value) || 2;
-        const topN = Number(document.getElementById('tag-top-n').value) || 25;
+        var minFrequencyInput = document.getElementById('tag-min-frequency');
+        var minTokenInput = document.getElementById('tag-min-token-length');
+        var topNInput = document.getElementById('tag-top-n');
+        const minFrequency = Number(minFrequencyInput ? minFrequencyInput.value : '3') || 3;
+        const minTokenLength = Number(minTokenInput ? minTokenInput.value : '2') || 2;
+        const topN = Number(topNInput ? topNInput.value : '25') || 25;
         const ngramSizes = [];
-        [1, 2, 3].forEach((size) => {
-            const checkbox = document.getElementById('tag-ngram-' + size);
+        [1, 2, 3].forEach(function (size) {
+            const checkbox = document.getElementById('tag-allow-' + size + 'gram');
             if (checkbox && checkbox.checked) {
                 ngramSizes.push(size);
             }
@@ -494,12 +500,18 @@
         if (statusSelect && typeof statusSelect.clear === 'function') {
             statusSelect.clear(true);
         }
-        document.getElementById('tag-min-frequency').value = '3';
-        document.getElementById('tag-min-token').value = '2';
-        document.getElementById('tag-top-n').value = '25';
-        document.getElementById('tag-ngram-1').checked = true;
-        document.getElementById('tag-ngram-2').checked = true;
-        document.getElementById('tag-ngram-3').checked = true;
+        var freqInput = document.getElementById('tag-min-frequency');
+        if (freqInput) freqInput.value = '3';
+        var tokenInput = document.getElementById('tag-min-token-length');
+        if (tokenInput) tokenInput.value = '2';
+        var topInput = document.getElementById('tag-top-n');
+        if (topInput) topInput.value = '25';
+        var allow1 = document.getElementById('tag-allow-1gram');
+        if (allow1) allow1.checked = true;
+        var allow2 = document.getElementById('tag-allow-2gram');
+        if (allow2) allow2.checked = true;
+        var allow3 = document.getElementById('tag-allow-3gram');
+        if (allow3) allow3.checked = true;
         populateFilters();
         renderEmptyState();
         currentResults = [];

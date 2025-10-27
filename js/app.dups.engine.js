@@ -516,7 +516,7 @@
                     }
         
                     function buildSnippet(text, tokens) {
-                        return buildHighlighted(text, tokens, 280);
+                        return buildHighlighted(text, tokens, null);
                     }
 
                     function buildFullHighlight(text, tokens) {

@@ -724,10 +724,10 @@ a:focus {
 .record {
     display: grid;
     gap: 16px;
-    grid-template-columns: 2fr 1fr 1fr 1fr auto;
+    grid-template-columns: 2fr 1fr 1fr 1fr minmax(160px, 1fr);
     padding: 18px 20px;
     border-top: 1px solid var(--border-color);
-    align-items: center;
+    align-items: flex-start;
     transition: background var(--transition);
 }
 
@@ -774,6 +774,7 @@ a:focus {
 .record__snippet {
     font-size: 0.9rem;
     color: var(--text-secondary);
+    overflow-wrap: anywhere;
 }
 
 .record__snippet mark,
@@ -792,10 +793,10 @@ a:focus {
 
 .record__actions {
     display: flex;
-    flex-direction: row;
+    flex-direction: column;
     gap: 8px;
-    align-items: center;
-    justify-content: flex-end;
+    align-items: stretch;
+    justify-content: flex-start;
 }
 
 .record__actions button {
@@ -806,6 +807,7 @@ a:focus {
     color: var(--text-primary);
     cursor: pointer;
     transition: background var(--transition), border-color var(--transition);
+    width: 100%;
 }
 
 .record__actions button:hover:not([disabled]) {
@@ -826,8 +828,21 @@ a:focus {
     align-items: center;
 }
 
-.search-form__row input[type="text"] {
-    flex: 1 1 260px;
+.search-form__row--main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: center;
+}
+
+
+.search-form__input-wrap {
+    position: relative;
+    width: 100%;
+}
+
+.search-form__input-wrap input[type="text"] {
+    width: 100%;
     padding: 12px 14px;
     border-radius: var(--radius-md);
     border: 1px solid var(--border-color);
@@ -837,7 +852,7 @@ a:focus {
     transition: border-color var(--transition), box-shadow var(--transition);
 }
 
-.search-form__row input[type="text"]:focus {
+.search-form__input-wrap input[type="text"]:focus {
     border-color: var(--bg-primary);
     box-shadow: 0 0 0 3px rgba(45, 91, 255, 0.2);
     outline: none;
@@ -911,11 +926,9 @@ a:focus {
 }
 
 .description-cell {
-    display: inline-block;
-    max-width: 420px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    display: block;
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
 
 .description-cell mark {
@@ -1009,6 +1022,12 @@ a:focus {
     display: flex;
     flex-wrap: wrap;
     gap: 24px;
+}
+
+.tag-filters fieldset {
+    border: none;
+    margin: 0;
+    padding: 0;
 }
 
 .tag-results {
@@ -1242,6 +1261,7 @@ a:focus {
     margin: 0;
     white-space: pre-wrap;
     color: var(--text-secondary);
+    overflow-wrap: anywhere;
 }
 
 .compare-modal__list {

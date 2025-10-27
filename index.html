@@ -12,7 +12,6 @@
         <header class="page__header">
             <div class="page__title">
                 <h1>Портал обработки обращений</h1>
-                <p>Загрузите CSV и используйте вкладки для анализа обращений.</p>
             </div>
             <div class="page__header-actions">
                 <div class="upload">
@@ -33,7 +32,6 @@
                 <div class="tab-toolbar">
                     <div class="tab-toolbar__text">
                         <h2>Дубли обращений</h2>
-                        <p>Сравниваем обращения одного автора по описанию и выделяем свежую карточку.</p>
                     </div>
                     <div class="tab-toolbar__actions">
                         <button id="btn-run-duplicates" class="button button--primary" type="button" disabled>Найти дубли</button>
@@ -60,7 +58,6 @@
                 <section class="section-card section-card--results">
                     <div class="section-card__header">
                         <h3>Результаты анализа</h3>
-                        <p class="section-card__hint">Основное обращение выделено цветом. Остальные записи можно закрыть как дубли.</p>
                     </div>
                     <div id="duplicate-results" class="results"></div>
                 </section>
@@ -69,10 +66,8 @@
                 <div class="tab-toolbar">
                     <div class="tab-toolbar__text">
                         <h2>Поиск по обращениям</h2>
-                        <p>Поиск выполняется по автору и описанию. Фильтры помогут сузить результат.</p>
                     </div>
                     <div class="tab-toolbar__actions">
-                        <button id="btn-run-search" class="button button--primary" type="button" disabled>Найти</button>
                         <button type="button" class="button button--ghost" data-help-open="search">Справка</button>
                     </div>
                 </div>
@@ -80,14 +75,16 @@
                     <section class="section-card layout-grid__main">
                         <div class="section-card__header">
                             <h3>Запрос и фильтры</h3>
-                            <p class="section-card__hint">Добавьте ключевые слова, выберите статусы и приоритеты, затем нажмите "Найти".</p>
                         </div>
                         <div class="section-card__body">
                             <div class="search-form">
-                                <div class="search-form__row">
-                                    <input type="text" id="search-query" placeholder="Например: ошибка vrm" autocomplete="off">
-                                    <div id="search-keywords" class="chips"><span class="chip">Нет ключевых слов</span></div>
+                                <div class="search-form__row search-form__row--main">
+                                    <div class="search-form__input-wrap">
+                                        <input type="text" id="search-query" placeholder="Например: ошибка vrm" autocomplete="off">
+                                    </div>
+                                    <button id="btn-run-search" class="button button--primary" type="button" disabled>Найти</button>
                                 </div>
+                                <div id="search-keywords" class="chips"><span class="chip">Нет ключевых слов</span></div>
                                 <div class="search-form__row search-form__row--filters">
                                     <label class="filter">
                                         <span>Статус</span>
@@ -122,10 +119,12 @@
                             </div>
                         </div>
                     </section>
-                    <section class="section-card layout-grid__side">
-                        <div class="section-card__header">
-                            <h3>Категории поиска</h3>
-                            <p class="section-card__hint">Категории добавляют ключевые слова к запросу. Их можно редактировать, импортировать и экспортировать.</p>
+                    <section class="section-card section-card--collapsible layout-grid__side" data-panel-id="search-categories" data-close-label="Показать категории" data-open-label="Скрыть категории" data-open="true">
+                        <div class="section-card__header section-card__header--inline">
+                            <div>
+                                <h3>Категории поиска</h3>
+                            </div>
+                            <button type="button" class="section-card__toggle button button--ghost" data-panel-toggle="search-categories" aria-expanded="true">Скрыть категории</button>
                         </div>
                         <div class="section-card__body section-card__body--gap">
                             <div class="section-card__actions section-card__actions--stack">
@@ -141,7 +140,6 @@
                 <section class="section-card section-card--results">
                     <div class="section-card__header">
                         <h3>Результаты поиска</h3>
-                        <p class="section-card__hint">Отображаются столбцы ID, описание, дата, статус и приоритет. Наведите на описание, чтобы увидеть полный текст.</p>
                     </div>
                     <div id="search-results" class="results"></div>
                 </section>
@@ -150,7 +148,6 @@
                 <div class="tab-toolbar">
                     <div class="tab-toolbar__text">
                         <h2>Поиск тегов</h2>
-                        <p>Собираем устойчивые фразы из описаний выбранных шаблонов.</p>
                     </div>
                     <div class="tab-toolbar__actions">
                         <button id="btn-run-tags" class="button button--primary" type="button" disabled>Найти теги</button>
@@ -161,7 +158,6 @@
                     <div class="section-card__header section-card__header--inline">
                         <div>
                             <h3>Параметры отбора тегов</h3>
-                            <p class="section-card__hint">Подберите частоту и длину фраз перед поиском. При необходимости измените список шаблонов и статусов.</p>
                         </div>
                         <button type="button" class="section-card__toggle button button--ghost" data-panel-toggle="tag-settings" aria-expanded="true">Скрыть параметры</button>
                     </div>
@@ -222,7 +218,6 @@
                 <section class="section-card section-card--results">
                     <div class="section-card__header">
                         <h3>Сформированные теги</h3>
-                        <p class="section-card__hint">Редактируйте список тегов, удаляйте лишние и сохраняйте изменения для каждого шаблона.</p>
                     </div>
                     <div id="tag-results" class="tag-results"></div>
                 </section>

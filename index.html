@@ -36,6 +36,7 @@
                         <p>Сравниваем обращения одного автора по описанию и выделяем свежую карточку.</p>
                     </div>
                     <div class="tab-toolbar__actions">
+                        <button id="btn-run-duplicates" class="button button--primary" type="button" disabled>Найти дубли</button>
                         <button type="button" class="button button--ghost" data-help-open="duplicates">Справка</button>
                     </div>
                 </div>
@@ -52,7 +53,6 @@
                     </div>
                     <div class="section-card__footer" hidden>
                         <div class="section-card__actions">
-                            <button id="btn-run-duplicates" class="button button--primary" type="button" disabled>Найти дубли</button>
                             <button id="btn-export-duplicates" class="button" type="button" disabled>Экспорт дублей (CSV)</button>
                         </div>
                     </div>
@@ -72,6 +72,7 @@
                         <p>Поиск выполняется по автору и описанию. Фильтры помогут сузить результат.</p>
                     </div>
                     <div class="tab-toolbar__actions">
+                        <button id="btn-run-search" class="button button--primary" type="button" disabled>Найти</button>
                         <button type="button" class="button button--ghost" data-help-open="search">Справка</button>
                     </div>
                 </div>
@@ -115,7 +116,6 @@
                                     <div id="search-result-count" class="search-result-count">Найдено: 0</div>
                                     <div class="section-card__actions">
                                         <button id="btn-reset-filters" class="button button--ghost" type="button">Сбросить фильтры</button>
-                                        <button id="btn-run-search" class="button button--primary" type="button" disabled>Найти</button>
                                         <button id="btn-export-search" class="button" type="button" disabled>Экспорт CSV</button>
                                     </div>
                                 </div>
@@ -153,6 +153,7 @@
                         <p>Собираем устойчивые фразы из описаний выбранных шаблонов.</p>
                     </div>
                     <div class="tab-toolbar__actions">
+                        <button id="btn-run-tags" class="button button--primary" type="button" disabled>Найти теги</button>
                         <button type="button" class="button button--ghost" data-help-open="tags">Справка</button>
                     </div>
                 </div>
@@ -211,7 +212,6 @@
                                 <label><input type="checkbox" id="tag-allow-3gram" checked>3 слова</label>
                             </fieldset>
                             <div class="section-card__actions">
-                                <button id="btn-run-tags" class="button button--primary" type="button" disabled>Найти теги</button>
                                 <button id="btn-export-tags-csv" class="button" type="button" disabled>Экспорт CSV</button>
                                 <button id="btn-export-tags-json" class="button" type="button" disabled>Экспорт JSON</button>
                                 <button id="btn-reset-tags" class="button button--ghost" type="button">Сброс</button>

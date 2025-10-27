@@ -1,22 +1,22 @@
 :root {
-    --bg-body: #f3f5fb;
+    --bg-body: #f5f7ff;
     --bg-card: #ffffff;
-    --bg-subtle: #eef1f9;
-    --bg-chip: #eef3ff;
-    --bg-chip-custom: #fff4e6;
-    --bg-badge: #dfe6ff;
-    --bg-primary: #2e5bff;
-    --bg-primary-hover: #2349de;
-    --bg-ghost-hover: rgba(46, 91, 255, 0.12);
-    --bg-highlight: #fff3c4;
-    --border-color: #d5dcef;
-    --border-strong: #bbc5e0;
-    --text-primary: #1b1d25;
-    --text-secondary: #4b5368;
-    --text-muted: #6f7992;
+    --bg-subtle: #e6ecff;
+    --bg-chip: #e9edff;
+    --bg-chip-custom: #fff1e3;
+    --bg-badge: #dbe3ff;
+    --bg-primary: #3454ff;
+    --bg-primary-hover: #2943d9;
+    --bg-ghost-hover: rgba(52, 84, 255, 0.12);
+    --bg-highlight: #fff2c2;
+    --border-color: #ccd4f0;
+    --border-strong: #b6c0e3;
+    --text-primary: #161a2b;
+    --text-secondary: #465074;
+    --text-muted: #697396;
     --text-invert: #ffffff;
-    --shadow-soft: 0 12px 34px rgba(32, 45, 85, 0.08);
-    --shadow-hover: 0 18px 42px rgba(32, 45, 85, 0.12);
+    --shadow-soft: 0 14px 36px rgba(26, 38, 84, 0.1);
+    --shadow-hover: 0 18px 46px rgba(26, 38, 84, 0.15);
     --radius-lg: 18px;
     --radius-md: 12px;
     --radius-sm: 8px;
@@ -25,24 +25,24 @@
 }
 
 [data-theme="dark"] {
-    --bg-body: #10131b;
-    --bg-card: #1a1f2b;
-    --bg-subtle: #222837;
-    --bg-chip: #2b3242;
-    --bg-chip-custom: #3a3023;
-    --bg-badge: #2b3653;
-    --bg-primary: #5f7dff;
-    --bg-primary-hover: #4a65f0;
-    --bg-ghost-hover: rgba(95, 125, 255, 0.18);
-    --bg-highlight: #4b3e1f;
-    --border-color: #2a3042;
-    --border-strong: #353c53;
-    --text-primary: #f1f4ff;
-    --text-secondary: #c6cfe8;
-    --text-muted: #949ebf;
-    --text-invert: #0f1118;
-    --shadow-soft: 0 16px 40px rgba(6, 11, 28, 0.45);
-    --shadow-hover: 0 22px 54px rgba(6, 11, 28, 0.6);
+    --bg-body: #0f172a;
+    --bg-card: #162240;
+    --bg-subtle: #1b2749;
+    --bg-chip: #24345b;
+    --bg-chip-custom: #3a2f1f;
+    --bg-badge: #23366a;
+    --bg-primary: #5a7bff;
+    --bg-primary-hover: #4964e6;
+    --bg-ghost-hover: rgba(90, 123, 255, 0.18);
+    --bg-highlight: #42371f;
+    --border-color: #223156;
+    --border-strong: #2c3b63;
+    --text-primary: #f2f5ff;
+    --text-secondary: #c4ccee;
+    --text-muted: #919cc4;
+    --text-invert: #0a0f1d;
+    --shadow-soft: 0 16px 42px rgba(6, 16, 38, 0.5);
+    --shadow-hover: 0 20px 58px rgba(6, 16, 38, 0.65);
 }
 
 *, *::before, *::after {

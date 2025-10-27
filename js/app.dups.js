@@ -22,6 +22,12 @@
         guard: null
     };
     let resultsListenerAttached = false;
+    const compareModal = {
+        node: document.getElementById('compare-modal'),
+        body: document.getElementById('compare-modal-body'),
+        title: document.getElementById('compare-modal-title')
+    };
+    let compareModalReady = false;
 
     document.addEventListener('app:ready', ({ detail }) => {
         settingsContainer = document.getElementById('duplicate-settings');
@@ -33,6 +39,7 @@
             resultsContainer.addEventListener('click', handleActionClick);
             resultsListenerAttached = true;
         }
+        initCompareModal();
     });
 
     document.addEventListener('app:settings-update', ({ detail }) => {
@@ -553,15 +560,19 @@
                 const openButton = document.createElement('button');
                 openButton.dataset.action = 'open';
                 openButton.dataset.id = recordId;
+                openButton.dataset.label = 'Открыть';
+                if (!record.isPrimary && masterId) {
+                    openButton.dataset.primary = masterId;
+                }
                 openButton.textContent = 'Открыть';
                 actions.appendChild(openButton);
-                const copyButton = document.createElement('button');
-                copyButton.dataset.action = 'copy';
-                copyButton.dataset.id = recordId;
-                copyButton.dataset.primary = masterId;
-                copyButton.textContent = 'Текст закрытия';
-                if (record.isPrimary) copyButton.disabled = true;
-                actions.appendChild(copyButton);
+                if (record.isPrimary) {
+                    const compareButton = document.createElement('button');
+                    compareButton.dataset.action = 'compare';
+                    compareButton.dataset.cluster = String(clusterIndex);
+                    compareButton.textContent = 'Сравнить описания';
+                    actions.appendChild(compareButton);
+                }
                 row.appendChild(actions);
 
                 list.appendChild(row);
@@ -584,24 +595,24 @@
             dismissCluster(clusterIndex);
             return;
         }
+        if (action === 'compare') {
+            const clusterIndex = button.dataset.cluster;
+            openCompareModal(clusterIndex);
+            return;
+        }
         const id = button.dataset.id;
         if (!id) return;
         if (action === 'open') {
             const url = 'https://sfera.vtb.ru/sd/support?open=' + encodeURIComponent(id);
+            const primaryId = button.dataset.primary;
+            if (primaryId && primaryId !== id) {
+                copyClosureText(primaryId).then(function (copied) {
+                    if (copied) {
+                        showCopyFeedback(button);
+                    }
+                });
+            }
             window.open(url, '_blank', 'noopener');
-            return;
-        }
-        if (action === 'copy') {
-            const primaryId = button.dataset.primary || id;
-            const text = 'Ошибочное обращение\nДубль обращения ' + primaryId + '. Работы продолжаются там.';
-            navigator.clipboard.writeText(text).then(function () {
-                button.textContent = 'Скопировано';
-                setTimeout(function () {
-                    button.textContent = 'Текст закрытия';
-                }, 2000);
-            }).catch(function () {
-                alert('Не удалось скопировать текст. Скопируйте вручную:\n' + text);
-            });
         }
     }
 
@@ -612,6 +623,161 @@
         if (index >= currentClusters.length) return;
         currentClusters.splice(index, 1);
         renderClusters(currentClusters, lastAnalysisMeta);
+    }
+
+    function showCopyFeedback(button) {
+        if (!button) return;
+        const base = button.dataset.label && button.dataset.label !== ''
+            ? button.dataset.label
+            : button.textContent;
+        button.textContent = base + ' (скопировано)';
+        setTimeout(function () {
+            button.textContent = base;
+        }, 2000);
+    }
+
+    function copyClosureText(primaryId) {
+        const text = 'Ошибочное обращение\nДубль обращения ' + primaryId + '. Работы продолжаются там.';
+        if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            return navigator.clipboard.writeText(text).then(function () {
+                return true;
+            }).catch(function () {
+                return fallbackCopyText(text);
+            });
+        }
+        return Promise.resolve(fallbackCopyText(text));
+    }
+
+    function fallbackCopyText(text) {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', 'readonly');
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        let success = false;
+        try {
+            success = document.execCommand('copy');
+        } catch (err) {
+            success = false;
+        }
+        document.body.removeChild(textarea);
+        if (!success) {
+            alert('Не удалось скопировать текст. Скопируйте вручную:\n' + text);
+        }
+        return success;
+    }
+
+    function initCompareModal() {
+        if (!compareModal.node || compareModalReady) return;
+        compareModalReady = true;
+        compareModal.node.addEventListener('click', function (event) {
+            const target = event.target;
+            if (target && target.dataset && target.dataset.compareClose !== undefined) {
+                closeCompareModal();
+            }
+        });
+        const closers = compareModal.node.querySelectorAll('[data-compare-close]');
+        Array.prototype.forEach.call(closers, function (button) {
+            button.addEventListener('click', function () {
+                closeCompareModal();
+            });
+        });
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape' && isCompareModalOpen()) {
+                closeCompareModal();
+            }
+        });
+    }
+
+    function openCompareModal(clusterIndex) {
+        if (!compareModal.node || !compareModal.body) return;
+        const index = Number(clusterIndex);
+        if (!Number.isFinite(index) || index < 0) return;
+        const cluster = currentClusters && currentClusters[index] ? currentClusters[index] : null;
+        if (!cluster) return;
+        const primary = cluster.primary || null;
+        const authorName = cluster.author ? cluster.author : 'Автор не указан';
+        if (compareModal.title) {
+            const idLabel = primary && primary.id ? primary.id : '-';
+            compareModal.title.textContent = 'Сравнение описаний: ' + idLabel;
+        }
+        compareModal.body.innerHTML = '';
+
+        const primarySection = document.createElement('div');
+        primarySection.className = 'compare-modal__section';
+        const primaryHeading = document.createElement('h4');
+        primaryHeading.textContent = 'Основное обращение ' + (primary && primary.id ? primary.id : '-');
+        primarySection.appendChild(primaryHeading);
+        const primaryMeta = document.createElement('p');
+        primaryMeta.className = 'compare-modal__meta';
+        let primaryMetaText = 'Автор: ' + authorName;
+        if (primary && primary.createdAt) {
+            primaryMetaText += ' | Создано: ' + primary.createdAt;
+        }
+        primaryMeta.textContent = primaryMetaText;
+        primarySection.appendChild(primaryMeta);
+        const primaryText = document.createElement('p');
+        primaryText.className = 'compare-modal__text';
+        primaryText.textContent = primary && primary.description ? primary.description : 'Описание отсутствует';
+        primarySection.appendChild(primaryText);
+        compareModal.body.appendChild(primarySection);
+
+        const duplicatesSection = document.createElement('div');
+        duplicatesSection.className = 'compare-modal__section';
+        const duplicatesHeading = document.createElement('h4');
+        const duplicates = cluster.duplicates || [];
+        duplicatesHeading.textContent = duplicates.length ? 'Дубли (' + duplicates.length + ')' : 'Дубли';
+        duplicatesSection.appendChild(duplicatesHeading);
+        if (duplicates.length) {
+            const list = document.createElement('div');
+            list.className = 'compare-modal__list';
+            duplicates.forEach(function (dup) {
+                const item = document.createElement('div');
+                item.className = 'compare-modal__item';
+                const itemHeading = document.createElement('h5');
+                const dupId = dup && dup.id ? dup.id : '-';
+                const dupSimilarity = dup && dup.similarity ? dup.similarity : '0%';
+                itemHeading.textContent = dupId + ' - ' + dupSimilarity;
+                item.appendChild(itemHeading);
+                const itemMeta = document.createElement('p');
+                itemMeta.className = 'compare-modal__meta';
+                let metaText = '';
+                if (dup && dup.createdAt) {
+                    metaText += 'Создано: ' + dup.createdAt;
+                }
+                if (dup && dup.similarityDetail) {
+                    if (metaText) metaText += ' | ';
+                    metaText += dup.similarityDetail;
+                }
+                itemMeta.textContent = metaText ? metaText : 'Дополнительные детали отсутствуют';
+                item.appendChild(itemMeta);
+                const itemText = document.createElement('p');
+                itemText.textContent = dup && dup.description ? dup.description : 'Описание отсутствует';
+                item.appendChild(itemText);
+                list.appendChild(item);
+            });
+            duplicatesSection.appendChild(list);
+        } else {
+            const empty = document.createElement('p');
+            empty.className = 'compare-modal__text';
+            empty.textContent = 'Дубли для сравнения отсутствуют.';
+            duplicatesSection.appendChild(empty);
+        }
+        compareModal.body.appendChild(duplicatesSection);
+        compareModal.body.scrollTop = 0;
+        compareModal.node.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeCompareModal() {
+        if (!compareModal.node) return;
+        compareModal.node.setAttribute('aria-hidden', 'true');
+    }
+
+    function isCompareModalOpen() {
+        return compareModal.node && compareModal.node.getAttribute('aria-hidden') === 'false';
     }
 
     function buildDuplicateEngine() {

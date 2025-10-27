@@ -8,7 +8,9 @@
     --bg-primary: #3454ff;
     --bg-primary-hover: #2943d9;
     --bg-ghost-hover: rgba(52, 84, 255, 0.12);
-    --bg-highlight: #fff2c2;
+    --bg-highlight: #ffe6a0;
+    --link-color: #d66b4d;
+    --link-hover: #bd593d;
     --border-color: #ccd4f0;
     --border-strong: #b6c0e3;
     --text-primary: #161a2b;
@@ -34,7 +36,9 @@
     --bg-primary: #5a7bff;
     --bg-primary-hover: #4964e6;
     --bg-ghost-hover: rgba(90, 123, 255, 0.18);
-    --bg-highlight: #42371f;
+    --bg-highlight: rgba(255, 214, 120, 0.35);
+    --link-color: #ff9d76;
+    --link-hover: #ffb08d;
     --border-color: #223156;
     --border-strong: #2c3b63;
     --text-primary: #f2f5ff;
@@ -61,6 +65,17 @@ body {
     color: var(--text-primary);
     background: var(--bg-body);
     transition: background 0.3s ease, color 0.3s ease;
+}
+
+a {
+    color: var(--link-color);
+    text-decoration: none;
+    transition: color var(--transition);
+}
+
+a:hover,
+a:focus {
+    color: var(--link-hover);
 }
 
 .page {
@@ -768,8 +783,10 @@ body {
 
 .record__actions {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     gap: 8px;
+    align-items: center;
+    justify-content: flex-end;
 }
 
 .record__actions button {
@@ -1149,6 +1166,10 @@ body {
     border: 1px solid var(--border-color);
 }
 
+.modal--wide .modal__dialog {
+    width: min(720px, calc(100% - 32px));
+}
+
 .modal__content {
     display: flex;
     flex-direction: column;
@@ -1179,6 +1200,64 @@ body {
     display: flex;
     flex-direction: column;
     gap: 16px;
+}
+
+.compare-modal__body {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.compare-modal__section {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    background: var(--bg-card);
+}
+
+.compare-modal__section h4 {
+    margin: 0 0 8px;
+    color: var(--text-primary);
+}
+
+.compare-modal__meta {
+    margin: 0 0 12px;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.compare-modal__text {
+    margin: 0;
+    white-space: pre-wrap;
+    color: var(--text-secondary);
+}
+
+.compare-modal__list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.compare-modal__item {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    background: var(--bg-subtle);
+}
+
+.compare-modal__item h5 {
+    margin: 0 0 6px;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+}
+
+.compare-modal__item p {
+    margin: 0;
+    white-space: pre-wrap;
+    color: var(--text-secondary);
 }
 
 .modal__field {

@@ -310,6 +310,21 @@
             </form>
         </div>
     </div>
+    <div class="modal modal--wide" id="compare-modal" aria-hidden="true" role="dialog" aria-modal="true">
+        <div class="modal__backdrop" data-compare-close></div>
+        <div class="modal__dialog">
+            <div class="modal__content">
+                <div class="modal__header">
+                    <h3 id="compare-modal-title">Сравнение описаний</h3>
+                    <button type="button" class="modal__close" data-compare-close aria-label="Закрыть">X</button>
+                </div>
+                <div class="modal__body compare-modal__body" id="compare-modal-body"></div>
+                <div class="modal__footer">
+                    <button type="button" class="button button--ghost" data-compare-close>Закрыть</button>
+                </div>
+            </div>
+        </div>
+    </div>
     <script src="js/vendor/papaparse.min.js"></script>
     <script src="js/vendor/flexsearch.min.js"></script>
     <script src="js/app.core.shared.js"></script>

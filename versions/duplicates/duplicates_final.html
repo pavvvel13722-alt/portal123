@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Дубли обращений (готовая версия)</title>
+    <link rel="stylesheet" href="../../css/style.css">
+</head>
+<body>
+    <div class="page">
+        <header class="page__header">
+            <div class="page__title">
+                <h1>Портал обработки обращений</h1>
+                <p class="page__subtitle">Готовая вкладка для анализа дублей обращений.</p>
+            </div>
+            <div class="page__header-actions">
+                <div class="upload">
+                    <label for="csv-file" class="upload__label">Загрузить CSV (UTF-8 BOM)</label>
+                    <input type="file" id="csv-file" accept=".csv">
+                    <span id="upload-info" class="upload__info">Файл не загружен</span>
+                </div>
+                <button id="theme-toggle" class="button button--ghost" type="button">Тёмная тема</button>
+            </div>
+        </header>
+        <nav class="tabs" role="tablist">
+            <button class="tabs__tab tabs__tab--active" data-tab="duplicates" role="tab" aria-selected="true">Дубли обращений</button>
+        </nav>
+        <main class="tabs-body">
+            <section id="tab-duplicates" class="tab-panel tab-panel--active" role="tabpanel" aria-labelledby="duplicates">
+                <div class="tab-toolbar">
+                    <div class="tab-toolbar__text">
+                        <h2>Дубли обращений</h2>
+                    </div>
+                    <div class="tab-toolbar__actions">
+                        <button id="btn-run-duplicates" class="button button--primary" type="button" disabled>Найти дубли</button>
+                        <button type="button" class="button button--ghost" data-help-open="duplicates">Справка</button>
+                    </div>
+                </div>
+                <section class="section-card section-card--collapsible" data-panel-id="duplicate-settings" data-close-label="Показать настройки" data-open-label="Скрыть настройки" data-open="true">
+                    <div class="section-card__header section-card__header--inline">
+                        <div>
+                            <h3>Настройки анализа дублей</h3>
+                            <p class="section-card__hint">Порог, временное окно и стоп-фразы можно скорректировать перед запуском.</p>
+                        </div>
+                        <button type="button" class="section-card__toggle button button--ghost" data-panel-toggle="duplicate-settings" aria-expanded="true">Скрыть настройки</button>
+                    </div>
+                    <div class="section-card__body" id="duplicate-settings"></div>
+                    <div class="section-card__footer">
+                        <div class="section-card__actions">
+                            <button id="btn-export-duplicates" class="button" type="button" disabled>Экспорт дублей (CSV)</button>
+                        </div>
+                    </div>
+                </section>
+                <section class="section-card section-card--results">
+                    <div class="section-card__header">
+                        <h3>Результаты анализа</h3>
+                        <div id="duplicate-summary" class="duplicate-summary" hidden>Дублей к закрытию: <span id="duplicate-summary-count">0</span></div>
+                    </div>
+                    <div id="duplicate-results" class="results"></div>
+                </section>
+            </section>
+        </main>
+    </div>
+    <div class="help-overlay" data-help="duplicates" hidden>
+        <div class="help-overlay__backdrop" data-help-close></div>
+        <div class="help-overlay__dialog">
+            <header class="help-overlay__header">
+                <h3>Справка по поиску дублей</h3>
+                <button type="button" class="help-overlay__close" data-help-close aria-label="Закрыть">Закрыть</button>
+            </header>
+            <div class="help-overlay__body">
+                <p>Загрузите CSV, настройте порог похожести и запустите анализ. В результате вы увидите кластеры с основным обращением и списком дублей.</p>
+            </div>
+        </div>
+    </div>
+    <div class="modal modal--wide" id="compare-modal" aria-hidden="true" role="dialog" aria-modal="true">
+        <div class="modal__backdrop" data-modal-close></div>
+        <div class="modal__dialog">
+            <header class="modal__header">
+                <h3 id="compare-modal-title">Сравнение описаний</h3>
+                <button class="modal__close" type="button" data-modal-close aria-label="Закрыть">Закрыть</button>
+            </header>
+            <div class="modal__body compare-modal__body" id="compare-modal-body"></div>
+        </div>
+    </div>
+    <div hidden>
+        <button id="btn-run-search" type="button"></button>
+        <button id="btn-export-search" type="button"></button>
+        <button id="btn-run-tags" type="button"></button>
+        <button id="btn-export-tags-csv" type="button"></button>
+        <button id="btn-export-tags-json" type="button"></button>
+    </div>
+    <script src="../../js/vendor/papaparse.min.js"></script>
+    <script src="../../js/vendor/flexsearch.min.js"></script>
+    <script src="../../js/app.core.shared.js"></script>
+    <script src="../../js/app.core.js"></script>
+    <script src="../../js/app.dups.engine.js"></script>
+    <script src="../../js/app.dups.js"></script>
+</body>
+</html>

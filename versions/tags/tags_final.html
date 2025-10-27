@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Поиск тегов (готовая версия)</title>
+    <link rel="stylesheet" href="../../css/style.css">
+</head>
+<body>
+    <div class="page">
+        <header class="page__header">
+            <div class="page__title">
+                <h1>Портал обработки обращений</h1>
+                <p class="page__subtitle">Готовая вкладка для автоматического подбора тегов по шаблонам.</p>
+            </div>
+            <div class="page__header-actions">
+                <div class="upload">
+                    <label for="csv-file" class="upload__label">Загрузить CSV (UTF-8 BOM)</label>
+                    <input type="file" id="csv-file" accept=".csv">
+                    <span id="upload-info" class="upload__info">Файл не загружен</span>
+                </div>
+                <button id="theme-toggle" class="button button--ghost" type="button">Тёмная тема</button>
+            </div>
+        </header>
+        <nav class="tabs" role="tablist">
+            <button class="tabs__tab tabs__tab--active" data-tab="tags" role="tab" aria-selected="true">Поиск тегов</button>
+        </nav>
+        <main class="tabs-body">
+            <section id="tab-tags" class="tab-panel tab-panel--active" role="tabpanel" aria-labelledby="tags">
+                <div class="tab-toolbar">
+                    <div class="tab-toolbar__text">
+                        <h2>Поиск тегов</h2>
+                    </div>
+                    <div class="tab-toolbar__actions">
+                        <button id="btn-run-tags" class="button button--primary" type="button" disabled>Найти теги</button>
+                        <button type="button" class="button button--ghost" data-help-open="tags">Справка</button>
+                    </div>
+                </div>
+                <section class="section-card section-card--collapsible" data-panel-id="tag-settings" data-close-label="Показать параметры" data-open-label="Скрыть параметры" data-open="true">
+                    <div class="section-card__header section-card__header--inline">
+                        <div>
+                            <h3>Параметры отбора тегов</h3>
+                        </div>
+                        <button type="button" class="section-card__toggle button button--ghost" data-panel-toggle="tag-settings" aria-expanded="true">Скрыть параметры</button>
+                    </div>
+                    <div class="section-card__body">
+                        <div class="tag-filters">
+                            <div class="tag-filters__row">
+                                <label class="filter">
+                                    <span>Шаблоны</span>
+                                    <div class="multi-select" data-multi="tag-filter-template">
+                                        <button type="button" class="multi-select__trigger" aria-haspopup="listbox" aria-expanded="false">
+                                            <span class="multi-select__label">Все шаблоны</span>
+                                            <span class="multi-select__icon">▼</span>
+                                        </button>
+                                        <div class="multi-select__dropdown" role="listbox" hidden></div>
+                                    </div>
+                                    <input type="hidden" id="tag-filter-template" value="">
+                                </label>
+                                <label class="filter">
+                                    <span>Статусы</span>
+                                    <div class="multi-select" data-multi="tag-filter-status">
+                                        <button type="button" class="multi-select__trigger" aria-haspopup="listbox" aria-expanded="false">
+                                            <span class="multi-select__label">Решено, Выполнено</span>
+                                            <span class="multi-select__icon">▼</span>
+                                        </button>
+                                        <div class="multi-select__dropdown" role="listbox" hidden></div>
+                                    </div>
+                                    <input type="hidden" id="tag-filter-status" value="">
+                                </label>
+                            </div>
+                            <fieldset class="tag-filters__row tag-filters__row--grid">
+                                <label class="filter">
+                                    <span>Минимальная частота</span>
+                                    <input type="number" id="tag-min-frequency" min="1" value="3">
+                                </label>
+                                <label class="filter">
+                                    <span>Минимальная длина слова</span>
+                                    <input type="number" id="tag-min-token-length" min="1" value="2">
+                                </label>
+                                <label class="filter">
+                                    <span>Количество тегов</span>
+                                    <input type="number" id="tag-top-n" min="1" value="25">
+                                </label>
+                            </fieldset>
+                            <fieldset class="tag-filters__row tag-filters__row--checks">
+                                <legend>Фразы к анализу</legend>
+                                <label><input type="checkbox" id="tag-allow-1gram" checked>1 слово</label>
+                                <label><input type="checkbox" id="tag-allow-2gram" checked>2 слова</label>
+                                <label><input type="checkbox" id="tag-allow-3gram" checked>3 слова</label>
+                            </fieldset>
+                            <div class="section-card__actions">
+                                <button id="btn-export-tags-csv" class="button" type="button" disabled>Экспорт CSV</button>
+                                <button id="btn-export-tags-json" class="button" type="button" disabled>Экспорт JSON</button>
+                                <button id="btn-reset-tags" class="button button--ghost" type="button">Сброс</button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+                <section class="section-card">
+                    <div class="section-card__header">
+                        <h3>Настройки обработки</h3>
+                    </div>
+                    <div class="section-card__body">
+                        <div id="tags-settings" class="settings"></div>
+                    </div>
+                </section>
+                <section class="section-card section-card--results">
+                    <div class="section-card__header">
+                        <h3>Сформированные теги</h3>
+                    </div>
+                    <div id="tag-results" class="tag-results"></div>
+                </section>
+            </section>
+        </main>
+    </div>
+    <div class="help-overlay" data-help="tags" hidden>
+        <div class="help-overlay__backdrop" data-help-close></div>
+        <div class="help-overlay__dialog">
+            <header class="help-overlay__header">
+                <h3>Справка по поиску тегов</h3>
+                <button type="button" class="help-overlay__close" data-help-close aria-label="Закрыть">Закрыть</button>
+            </header>
+            <div class="help-overlay__body">
+                <p>Выберите шаблоны и статусы обращений, задайте параметры и запустите анализ. Результат можно экспортировать или скорректировать вручную.</p>
+            </div>
+        </div>
+    </div>
+    <div hidden>
+        <button id="btn-run-duplicates" type="button"></button>
+        <button id="btn-export-duplicates" type="button"></button>
+        <button id="btn-run-search" type="button"></button>
+        <button id="btn-export-search" type="button"></button>
+    </div>
+    <script src="../../js/vendor/papaparse.min.js"></script>
+    <script src="../../js/vendor/flexsearch.min.js"></script>
+    <script src="../../js/app.core.shared.js"></script>
+    <script src="../../js/app.core.js"></script>
+    <script src="../../js/app.tags.engine.js"></script>
+    <script src="../../js/app.tags.js"></script>
+</body>
+</html>

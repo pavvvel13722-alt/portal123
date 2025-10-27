@@ -625,6 +625,18 @@
         renderClusters(currentClusters, lastAnalysisMeta);
     }
 
+    function getRecordDescriptionHtml(record) {
+        if (!record) return '<span class="record__meta">Описание отсутствует</span>';
+        if (record.fullHighlight && record.fullHighlight !== '') return record.fullHighlight;
+        if (record.description && record.description !== '') {
+            if (typeof window !== 'undefined' && typeof window.escapeHtml === 'function') {
+                return window.escapeHtml(record.description);
+            }
+            return String(record.description);
+        }
+        return '<span class="record__meta">Описание отсутствует</span>';
+    }
+
     function showCopyFeedback(button) {
         if (!button) return;
         const base = button.dataset.label && button.dataset.label !== ''
@@ -721,7 +733,7 @@
         primarySection.appendChild(primaryMeta);
         const primaryText = document.createElement('p');
         primaryText.className = 'compare-modal__text';
-        primaryText.textContent = primary && primary.description ? primary.description : 'Описание отсутствует';
+        primaryText.innerHTML = getRecordDescriptionHtml(primary);
         primarySection.appendChild(primaryText);
         compareModal.body.appendChild(primarySection);
 
@@ -755,7 +767,8 @@
                 itemMeta.textContent = metaText ? metaText : 'Дополнительные детали отсутствуют';
                 item.appendChild(itemMeta);
                 const itemText = document.createElement('p');
-                itemText.textContent = dup && dup.description ? dup.description : 'Описание отсутствует';
+                itemText.className = 'compare-modal__text';
+                itemText.innerHTML = getRecordDescriptionHtml(dup);
                 item.appendChild(itemText);
                 list.appendChild(item);
             });

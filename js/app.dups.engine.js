@@ -430,6 +430,7 @@
                             dueAt: record.dueAt || '',
                             description: record.description || '',
                             snippet: buildSnippet(record.description, sharedTokens),
+                            fullHighlight: buildFullHighlight(record.description, sharedTokens),
                             similarity: Math.round(pair.score * 100) + '%',
                             similarityValue: pair.score,
                             similarityDetail: buildSimilarityDetail(pair),
@@ -437,7 +438,7 @@
                             isPrimary: false
                         };
                     }
-        
+
                     function formatPrimary(record, highlightTokens) {
                         return {
                             id: record.id,
@@ -449,6 +450,7 @@
                             dueAt: record.dueAt || '',
                             description: record.description || '',
                             snippet: buildSnippet(record.description, highlightTokens),
+                            fullHighlight: buildFullHighlight(record.description, highlightTokens),
                             similarity: null,
                             similarityValue: null,
                             similarityDetail: 'Опорная заявка',
@@ -514,9 +516,20 @@
                     }
         
                     function buildSnippet(text, tokens) {
+                        return buildHighlighted(text, tokens, 280);
+                    }
+
+                    function buildFullHighlight(text, tokens) {
+                        return buildHighlighted(text, tokens, null);
+                    }
+
+                    function buildHighlighted(text, tokens, limit) {
                         if (!text) return '<span class="record__meta">Описание отсутствует</span>';
                         const trimmed = collapseWhitespace(String(text || ''));
-                        const short = trimmed.length > 280 ? trimmed.slice(0, 280) + '...' : trimmed;
+                        let base = trimmed;
+                        if (typeof limit === 'number' && limit > 0 && trimmed.length > limit) {
+                            base = trimmed.slice(0, limit) + '...';
+                        }
                         const highlightTokens = Array.from(tokens || [])
                             .map((token) => {
                                 if (!token) return '';
@@ -525,9 +538,9 @@
                             })
                             .filter((token) => token && token.length > 2 && SAFE_TOKEN_PATTERN.test(token));
                         if (!highlightTokens.length) {
-                            return escapeHtml(short);
+                            return escapeHtml(base);
                         }
-                        const lowerText = toLowerNoYo(short);
+                        const lowerText = toLowerNoYo(base);
                         const ranges = [];
                         const seen = new Set();
                         for (let i = 0; i < highlightTokens.length; i += 1) {
@@ -548,7 +561,7 @@
                             }
                         }
                         if (!ranges.length) {
-                            return escapeHtml(short);
+                            return escapeHtml(base);
                         }
                         ranges.sort((a, b) => a[0] - b[0]);
                         const merged = [];
@@ -563,15 +576,17 @@
                         let result = '';
                         let cursor = 0;
                         for (let i = 0; i < merged.length; i += 1) {
-                            const [start, end] = merged[i];
+                            const pair = merged[i];
+                            const start = pair[0];
+                            const end = pair[1];
                             if (cursor < start) {
-                                result += escapeHtml(short.slice(cursor, start));
+                                result += escapeHtml(base.slice(cursor, start));
                             }
-                            result += '<mark>' + escapeHtml(short.slice(start, end)) + '</mark>';
+                            result += '<mark>' + escapeHtml(base.slice(start, end)) + '</mark>';
                             cursor = end;
                         }
-                        if (cursor < short.length) {
-                            result += escapeHtml(short.slice(cursor));
+                        if (cursor < base.length) {
+                            result += escapeHtml(base.slice(cursor));
                         }
                         return result;
                     }

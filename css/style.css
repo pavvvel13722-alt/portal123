@@ -776,6 +776,15 @@ a:focus {
     color: var(--text-secondary);
 }
 
+.record__snippet mark,
+.compare-modal__text mark,
+.compare-modal__item mark {
+    background: var(--bg-highlight);
+    color: inherit;
+    padding: 0 2px;
+    border-radius: 2px;
+}
+
 .record__meta {
     font-size: 0.75rem;
     color: var(--text-muted);
@@ -1258,6 +1267,25 @@ a:focus {
     margin: 0;
     white-space: pre-wrap;
     color: var(--text-secondary);
+}
+
+.tag-filters__row input[type="number"],
+.tag-filters__row input[type="text"],
+.tag-filters__row select {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+    background: var(--bg-card);
+    color: var(--text-primary);
+    transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.tag-filters__row input[type="number"]:focus,
+.tag-filters__row input[type="text"]:focus,
+.tag-filters__row select:focus {
+    border-color: var(--bg-primary);
+    box-shadow: 0 0 0 3px rgba(45, 91, 255, 0.2);
+    outline: none;
 }
 
 .modal__field {

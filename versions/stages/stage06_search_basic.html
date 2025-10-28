@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Портал обращений - версия 0.6</title>
+    <link rel="stylesheet" href="../../css/style.css">
+    <style>
+        .stage-container {
+            max-width: 1120px;
+            margin: 24px auto 72px;
+            padding: 0 24px 56px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+        .stage-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .stage-table th,
+        .stage-table td {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-color);
+            text-align: left;
+            vertical-align: top;
+        }
+        .stage-table tbody tr:hover {
+            background: var(--bg-subtle);
+        }
+        .tabs__tab[disabled] {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .search-toolbar {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        .search-toolbar input {
+            flex: 1;
+        }
+        mark {
+            background: rgba(255, 214, 102, 0.8);
+            color: var(--text-primary);
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <header class="page__header">
+            <div class="page__title">
+                <h1>Портал обработки обращений</h1>
+                <p>Версия 0.6: полноценный поиск по авторам и описаниям с подсветкой совпадений.</p>
+            </div>
+            <div class="page__header-actions">
+                <div class="upload">
+                    <label for="csv-file" class="upload__label">Загрузить CSV</label>
+                    <input id="csv-file" type="file" accept=".csv">
+                    <span id="upload-info" class="upload__info">Файл не выбран</span>
+                </div>
+            </div>
+        </header>
+        <nav class="tabs" role="tablist">
+            <button class="tabs__tab" type="button" disabled>Дубли обращений</button>
+            <button class="tabs__tab tabs__tab--active" type="button">Поиск по обращениям</button>
+            <button class="tabs__tab" type="button" disabled>Поиск тегов</button>
+        </nav>
+        <main class="stage-container">
+            <section class="section-card">
+                <div class="section-card__header">
+                    <h2>Форма поиска</h2>
+                </div>
+                <div class="section-card__body">
+                    <div class="search-toolbar">
+                        <input id="search-query" type="text" placeholder="Введите автора или ключевую фразу" autocomplete="off">
+                        <button id="run-search" class="button button--primary" type="button" disabled>Найти</button>
+                        <button id="reset-search" class="button button--ghost" type="button" disabled>Сбросить</button>
+                    </div>
+                    <p class="section-card__hint">Поиск выполняется по авторам, названиям и описаниям обращений.</p>
+                </div>
+            </section>
+            <section class="section-card section-card--results">
+                <div class="section-card__header">
+                    <h2>Результаты</h2>
+                </div>
+                <div class="section-card__body">
+                    <div class="section-card__actions">
+                        <span id="result-count">Найдено: 0</span>
+                    </div>
+                    <div class="table-scroll">
+                        <table class="stage-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Автор</th>
+                                    <th>Название</th>
+                                    <th>Описание</th>
+                                </tr>
+                            </thead>
+                            <tbody id="results-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="../../js/app.core.shared.js"></script>
+    <script>
+    (function(){
+        function getShared(){
+            if (window && window.AppCoreShared) {
+                return window.AppCoreShared;
+            }
+            return null;
+        }
+        function trimValue(value){
+            if (value == null) {
+                return '';
+            }
+            return String(value).replace(/\s+/g, ' ').trim();
+        }
+        function parseRecords(text){
+            var shared = getShared();
+            if (!shared) {
+                return [];
+            }
+            var parsed = null;
+            try {
+                parsed = shared.autoParseCsv(text);
+            } catch (err) {
+                parsed = null;
+            }
+            var columns = parsed && parsed.meta && parsed.meta.fields ? parsed.meta.fields : [];
+            var data = parsed && parsed.data ? parsed.data : [];
+            if (!data.length) {
+                try {
+                    var fallback = shared.parseCsv(text, { delimiter: ';', header: true, skipEmptyLines: true });
+                    if (fallback) {
+                        data = fallback.data || [];
+                        if (!columns.length && fallback.meta && fallback.meta.fields) {
+                            columns = fallback.meta.fields;
+                        }
+                    }
+                } catch (errParse) {
+                    data = [];
+                }
+            }
+            var normalized = [];
+            for (var i = 0; i < data.length; i += 1) {
+                var normalizedRow = shared.normalizeRow(data[i], columns);
+                if (normalizedRow) {
+                    normalized.push(normalizedRow);
+                }
+            }
+            return normalized;
+        }
+        function matchesQuery(record, query){
+            var author = trimValue(record.author || record.requester || record.contact || '');
+            var title = trimValue(record.title || '');
+            var desc = trimValue(record.description || '');
+            var lower = query.toLowerCase();
+            if (author.toLowerCase().indexOf(lower) !== -1) {
+                return true;
+            }
+            if (title.toLowerCase().indexOf(lower) !== -1) {
+                return true;
+            }
+            return desc.toLowerCase().indexOf(lower) !== -1;
+        }
+        function createHighlight(text, query){
+            var fragment = document.createDocumentFragment();
+            if (!query) {
+                fragment.appendChild(document.createTextNode(text));
+                return fragment;
+            }
+            var source = text;
+            var lowerText = source.toLowerCase();
+            var lowerQuery = query.toLowerCase();
+            var start = 0;
+            var index = lowerText.indexOf(lowerQuery, start);
+            while (index !== -1) {
+                if (index > start) {
+                    fragment.appendChild(document.createTextNode(source.slice(start, index)));
+                }
+                var mark = document.createElement('mark');
+                mark.textContent = source.slice(index, index + lowerQuery.length);
+                fragment.appendChild(mark);
+                start = index + lowerQuery.length;
+                index = lowerText.indexOf(lowerQuery, start);
+            }
+            if (start < source.length) {
+                fragment.appendChild(document.createTextNode(source.slice(start)));
+            }
+            return fragment;
+        }
+        function renderResults(rows, query){
+            var body = document.getElementById('results-body');
+            var counter = document.getElementById('result-count');
+            if (!body || !counter) {
+                return;
+            }
+            body.innerHTML = '';
+            counter.textContent = 'Найдено: ' + rows.length;
+            for (var i = 0; i < rows.length; i += 1) {
+                var row = rows[i];
+                var tr = document.createElement('tr');
+                var idCell = document.createElement('td');
+                var link = document.createElement('a');
+                link.href = 'https://sfera.vtb.ru/sd/support?open=' + encodeURIComponent(row.id || '');
+                link.textContent = row.id || 'Без номера';
+                link.target = '_blank';
+                link.rel = 'noopener';
+                idCell.appendChild(link);
+                var authorCell = document.createElement('td');
+                authorCell.appendChild(createHighlight(trimValue(row.author || row.requester || row.contact || 'Без автора'), query));
+                var titleCell = document.createElement('td');
+                titleCell.appendChild(createHighlight(trimValue(row.title || 'Без названия'), query));
+                var descCell = document.createElement('td');
+                descCell.appendChild(createHighlight(trimValue(row.description || 'Без описания'), query));
+                tr.appendChild(idCell);
+                tr.appendChild(authorCell);
+                tr.appendChild(titleCell);
+                tr.appendChild(descCell);
+                body.appendChild(tr);
+            }
+        }
+        var fileInput = document.getElementById('csv-file');
+        var info = document.getElementById('upload-info');
+        var runButton = document.getElementById('run-search');
+        var resetButton = document.getElementById('reset-search');
+        var queryInput = document.getElementById('search-query');
+        var loadedRows = [];
+        if (!fileInput || !info || !runButton || !resetButton || !queryInput) {
+            return;
+        }
+        function updateButtons(){
+            var hasData = loadedRows.length > 0;
+            runButton.disabled = !hasData;
+            resetButton.disabled = !hasData;
+        }
+        fileInput.addEventListener('change', function(){
+            if (!fileInput.files || !fileInput.files.length) {
+                info.textContent = 'Файл не выбран';
+                loadedRows = [];
+                updateButtons();
+                renderResults([], '');
+                return;
+            }
+            var file = fileInput.files[0];
+            info.textContent = 'Загружаем: ' + file.name;
+            var reader = new FileReader();
+            reader.onload = function(event){
+                var text = event.target && event.target.result ? event.target.result : '';
+                loadedRows = parseRecords(text);
+                updateButtons();
+                info.textContent = file.name + ' - ' + loadedRows.length + ' записей';
+                renderResults([], '');
+            };
+            reader.readAsText(file, 'utf-8');
+        });
+        runButton.addEventListener('click', function(){
+            if (!loadedRows.length) {
+                return;
+            }
+            var query = trimValue(queryInput.value);
+            if (!query) {
+                renderResults([], '');
+                return;
+            }
+            var matches = [];
+            for (var i = 0; i < loadedRows.length; i += 1) {
+                if (matchesQuery(loadedRows[i], query)) {
+                    matches.push(loadedRows[i]);
+                }
+            }
+            renderResults(matches, query);
+        });
+        resetButton.addEventListener('click', function(){
+            queryInput.value = '';
+            renderResults([], '');
+        });
+    })();
+    </script>
+</body>
+</html>

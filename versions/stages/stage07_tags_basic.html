@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Портал обращений - версия 0.7</title>
+    <link rel="stylesheet" href="../../css/style.css">
+    <style>
+        .stage-container {
+            max-width: 1120px;
+            margin: 24px auto 80px;
+            padding: 0 24px 56px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+        .tabs__tab[disabled] {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .filter-grid {
+            display: grid;
+            gap: 16px;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        }
+        .filter-grid label {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .filter-grid select,
+        .filter-grid input[type="number"] {
+            padding: 10px 14px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            background: var(--bg-card);
+        }
+        .chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .chip {
+            padding: 6px 12px;
+            border-radius: 999px;
+            background: var(--bg-subtle);
+            border: 1px solid var(--border-color);
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+        .stage-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .stage-table th,
+        .stage-table td {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-color);
+            text-align: left;
+            vertical-align: top;
+        }
+        .stage-table tbody tr:hover {
+            background: var(--bg-subtle);
+        }
+        .checkbox-group {
+            display: flex;
+            gap: 12px;
+        }
+        .checkbox-group label {
+            flex-direction: row;
+            align-items: center;
+            gap: 6px;
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <header class="page__header">
+            <div class="page__title">
+                <h1>Портал обработки обращений</h1>
+                <p>Версия 0.7: базовый поиск тегов по шаблонам обращений.</p>
+            </div>
+            <div class="page__header-actions">
+                <div class="upload">
+                    <label for="csv-file" class="upload__label">Загрузить CSV</label>
+                    <input id="csv-file" type="file" accept=".csv">
+                    <span id="upload-info" class="upload__info">Файл не выбран</span>
+                </div>
+            </div>
+        </header>
+        <nav class="tabs" role="tablist">
+            <button class="tabs__tab" type="button" disabled>Дубли обращений</button>
+            <button class="tabs__tab" type="button" disabled>Поиск по обращениям</button>
+            <button class="tabs__tab tabs__tab--active" type="button">Поиск тегов</button>
+        </nav>
+        <main class="stage-container">
+            <section class="section-card">
+                <div class="section-card__header">
+                    <h2>Параметры извлечения</h2>
+                </div>
+                <div class="section-card__body">
+                    <div class="filter-grid">
+                        <label>
+                            <span>Шаблон</span>
+                            <select id="template-select"></select>
+                        </label>
+                        <label>
+                            <span>Статусы</span>
+                            <select id="status-select" multiple size="4"></select>
+                        </label>
+                        <label>
+                            <span>Мин. частота</span>
+                            <input id="minfreq-input" type="number" min="1" value="3">
+                        </label>
+                        <label>
+                            <span>Топ N</span>
+                            <input id="topn-input" type="number" min="1" value="25">
+                        </label>
+                        <label>
+                            <span>Мин. длина токена</span>
+                            <input id="mintoken-input" type="number" min="1" value="2">
+                        </label>
+                    </div>
+                    <div class="checkbox-group" style="margin-top:12px;">
+                        <label><input type="checkbox" id="ngram-1" checked> 1-граммы</label>
+                        <label><input type="checkbox" id="ngram-2" checked> 2-граммы</label>
+                        <label><input type="checkbox" id="ngram-3"> 3-граммы</label>
+                    </div>
+                </div>
+                <div class="section-card__footer">
+                    <div class="section-card__actions">
+                        <button id="run-tags" class="button button--primary" type="button" disabled>Найти теги</button>
+                    </div>
+                </div>
+            </section>
+            <section class="section-card section-card--results">
+                <div class="section-card__header">
+                    <h2>Подобранные теги</h2>
+                </div>
+                <div class="section-card__body">
+                    <div class="section-card__actions">
+                        <span id="tag-summary">Теги ещё не рассчитаны</span>
+                    </div>
+                    <div id="tag-chips" class="chips"></div>
+                    <div class="table-scroll" style="margin-top:16px;">
+                        <table class="stage-table">
+                            <thead>
+                                <tr>
+                                    <th>Фраза</th>
+                                    <th>Частота</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tag-table"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="../../js/app.core.shared.js"></script>
+    <script>
+    (function(){
+        function getShared(){
+            if (window && window.AppCoreShared) {
+                return window.AppCoreShared;
+            }
+            return null;
+        }
+        function trimValue(value){
+            if (value == null) {
+                return '';
+            }
+            return String(value).replace(/\s+/g, ' ').trim();
+        }
+        function parseRecords(text){
+            var shared = getShared();
+            if (!shared) {
+                return [];
+            }
+            var parsed = null;
+            try {
+                parsed = shared.autoParseCsv(text);
+            } catch (err) {
+                parsed = null;
+            }
+            var columns = parsed && parsed.meta && parsed.meta.fields ? parsed.meta.fields : [];
+            var data = parsed && parsed.data ? parsed.data : [];
+            if (!data.length) {
+                try {
+                    var fallback = shared.parseCsv(text, { delimiter: ';', header: true, skipEmptyLines: true });
+                    if (fallback) {
+                        data = fallback.data || [];
+                        if (!columns.length && fallback.meta && fallback.meta.fields) {
+                            columns = fallback.meta.fields;
+                        }
+                    }
+                } catch (errParse) {
+                    data = [];
+                }
+            }
+            var normalized = [];
+            for (var i = 0; i < data.length; i += 1) {
+                var normalizedRow = shared.normalizeRow(data[i], columns);
+                if (normalizedRow) {
+                    normalized.push(normalizedRow);
+                }
+            }
+            return normalized;
+        }
+        function tokenize(text, minLen){
+            var cleaned = text.toLowerCase().replace(/ё/g, 'е');
+            var tokens = cleaned.match(/[\p{L}\d]+/gu);
+            var result = [];
+            if (!tokens) {
+                return result;
+            }
+            for (var i = 0; i < tokens.length; i += 1) {
+                var token = tokens[i];
+                if (token.length >= minLen) {
+                    result.push(token);
+                }
+            }
+            return result;
+        }
+        function buildNgrams(tokens, size){
+            var grams = [];
+            if (tokens.length < size) {
+                return grams;
+            }
+            for (var i = 0; i <= tokens.length - size; i += 1) {
+                var parts = [];
+                for (var j = 0; j < size; j += 1) {
+                    parts.push(tokens[i + j]);
+                }
+                grams.push(parts.join(' '));
+            }
+            return grams;
+        }
+        function uniqueValues(rows, key){
+            var seen = {};
+            var list = [];
+            for (var i = 0; i < rows.length; i += 1) {
+                var value = trimValue(rows[i][key] || '');
+                if (!value || seen[value]) {
+                    continue;
+                }
+                seen[value] = true;
+                list.push(value);
+            }
+            return list;
+        }
+        function renderTemplates(list){
+            var select = document.getElementById('template-select');
+            if (!select) {
+                return;
+            }
+            select.innerHTML = '';
+            for (var i = 0; i < list.length; i += 1) {
+                var option = document.createElement('option');
+                option.value = list[i];
+                option.textContent = list[i];
+                select.appendChild(option);
+            }
+        }
+        function renderStatuses(list){
+            var select = document.getElementById('status-select');
+            if (!select) {
+                return;
+            }
+            select.innerHTML = '';
+            var defaults = { 'Решено': true, 'Выполнено': true };
+            for (var i = 0; i < list.length; i += 1) {
+                var option = document.createElement('option');
+                option.value = list[i];
+                option.textContent = list[i];
+                if (defaults[list[i]]) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            }
+        }
+        function getSelectedStatuses(){
+            var select = document.getElementById('status-select');
+            if (!select) {
+                return [];
+            }
+            var options = select.options;
+            var values = [];
+            for (var i = 0; i < options.length; i += 1) {
+                if (options[i].selected) {
+                    values.push(options[i].value);
+                }
+            }
+            return values;
+        }
+        function collectDescriptions(rows, template, statuses){
+            var result = [];
+            for (var i = 0; i < rows.length; i += 1) {
+                var row = rows[i];
+                var name = trimValue(row.title || '');
+                if (name !== template) {
+                    continue;
+                }
+                var status = trimValue(row.status || '');
+                if (statuses.length && statuses.indexOf(status) === -1) {
+                    continue;
+                }
+                var desc = trimValue(row.description || '');
+                if (desc) {
+                    result.push(desc);
+                }
+            }
+            return result;
+        }
+        function buildFrequencyMap(descriptions, minFreq, minTokenLen, sizes){
+            var counts = {};
+            for (var i = 0; i < descriptions.length; i += 1) {
+                var tokens = tokenize(descriptions[i], minTokenLen);
+                for (var s = 0; s < sizes.length; s += 1) {
+                    var n = sizes[s];
+                    var grams = buildNgrams(tokens, n);
+                    for (var g = 0; g < grams.length; g += 1) {
+                        var gram = grams[g];
+                        counts[gram] = (counts[gram] || 0) + 1;
+                    }
+                }
+            }
+            var entries = [];
+            var keys = Object.keys(counts);
+            for (var k = 0; k < keys.length; k += 1) {
+                var phrase = keys[k];
+                var freq = counts[phrase];
+                if (freq >= minFreq) {
+                    entries.push({ phrase: phrase, freq: freq });
+                }
+            }
+            entries.sort(function(a, b){
+                if (b.freq === a.freq) {
+                    return a.phrase.localeCompare(b.phrase);
+                }
+                return b.freq - a.freq;
+            });
+            return entries;
+        }
+        function renderTags(entries, topN){
+            var chips = document.getElementById('tag-chips');
+            var table = document.getElementById('tag-table');
+            var summary = document.getElementById('tag-summary');
+            if (!chips || !table || !summary) {
+                return;
+            }
+            chips.innerHTML = '';
+            table.innerHTML = '';
+            if (!entries.length) {
+                summary.textContent = 'Теги не найдены для выбранных условий.';
+                return;
+            }
+            summary.textContent = 'Показано ' + Math.min(entries.length, topN) + ' тегов из ' + entries.length + ' кандидатов.';
+            for (var i = 0; i < entries.length && i < topN; i += 1) {
+                var item = entries[i];
+                var chip = document.createElement('span');
+                chip.className = 'chip';
+                chip.textContent = item.phrase + ' (' + item.freq + ')';
+                chips.appendChild(chip);
+                var row = document.createElement('tr');
+                var phraseCell = document.createElement('td');
+                phraseCell.textContent = item.phrase;
+                var freqCell = document.createElement('td');
+                freqCell.textContent = String(item.freq);
+                row.appendChild(phraseCell);
+                row.appendChild(freqCell);
+                table.appendChild(row);
+            }
+        }
+        var fileInput = document.getElementById('csv-file');
+        var info = document.getElementById('upload-info');
+        var runButton = document.getElementById('run-tags');
+        var templates = document.getElementById('template-select');
+        if (!fileInput || !info || !runButton || !templates) {
+            return;
+        }
+        var allRows = [];
+        fileInput.addEventListener('change', function(){
+            if (!fileInput.files || !fileInput.files.length) {
+                info.textContent = 'Файл не выбран';
+                allRows = [];
+                runButton.disabled = true;
+                renderTags([], 0);
+                return;
+            }
+            var file = fileInput.files[0];
+            info.textContent = 'Загружаем: ' + file.name;
+            var reader = new FileReader();
+            reader.onload = function(event){
+                var text = event.target && event.target.result ? event.target.result : '';
+                allRows = parseRecords(text);
+                renderTemplates(uniqueValues(allRows, 'title'));
+                renderStatuses(uniqueValues(allRows, 'status'));
+                runButton.disabled = !allRows.length || !templates.options.length;
+                info.textContent = file.name + ' - ' + allRows.length + ' записей';
+                renderTags([], 0);
+            };
+            reader.readAsText(file, 'utf-8');
+        });
+        runButton.addEventListener('click', function(){
+            if (!allRows.length) {
+                return;
+            }
+            var template = templates.value;
+            if (!template) {
+                renderTags([], 0);
+                return;
+            }
+            var statuses = getSelectedStatuses();
+            var descriptions = collectDescriptions(allRows, template, statuses);
+            var minFreqInput = document.getElementById('minfreq-input');
+            var topNInput = document.getElementById('topn-input');
+            var minTokenInput = document.getElementById('mintoken-input');
+            var use1 = document.getElementById('ngram-1');
+            var use2 = document.getElementById('ngram-2');
+            var use3 = document.getElementById('ngram-3');
+            var sizes = [];
+            if (use1 && use1.checked) { sizes.push(1); }
+            if (use2 && use2.checked) { sizes.push(2); }
+            if (use3 && use3.checked) { sizes.push(3); }
+            if (!sizes.length) {
+                renderTags([], 0);
+                return;
+            }
+            var minFreq = parseInt(minFreqInput.value, 10);
+            if (isNaN(minFreq) || minFreq < 1) {
+                minFreq = 3;
+            }
+            var topN = parseInt(topNInput.value, 10);
+            if (isNaN(topN) || topN < 1) {
+                topN = 25;
+            }
+            var minToken = parseInt(minTokenInput.value, 10);
+            if (isNaN(minToken) || minToken < 1) {
+                minToken = 2;
+            }
+            var entries = buildFrequencyMap(descriptions, minFreq, minToken, sizes);
+            renderTags(entries, topN);
+        });
+    })();
+    </script>
+</body>
+</html>

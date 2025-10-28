@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Портал обращений - версия 0.2</title>
+    <link rel="stylesheet" href="../../css/style.css">
+    <style>
+        .wire-card { border:1px dashed #999999; border-radius:12px; padding:20px; margin-bottom:16px; background:#fafafa; }
+        .wire-toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+        .wire-placeholder { background:#e8e8e8; height:140px; border-radius:12px; display:flex; align-items:center; justify-content:center; color:#666666; font-size:18px; }
+    </style>
+</head>
+<body>
+    <div class="page" style="max-width:960px;margin:0 auto;padding:32px;">
+        <header class="wire-toolbar">
+            <h1 style="margin:0;">Версия 0.2 - прототип поиска дублей</h1>
+            <button type="button" class="button button--primary" disabled>Найти дубли</button>
+        </header>
+        <section class="wire-card">
+            <h2 style="margin-top:0;">Статистика</h2>
+            <p>Файл ещё не загружен. План: показать количество найденных дублей и время обработки.</p>
+        </section>
+        <section class="wire-card">
+            <h2 style="margin-top:0;">Группа дублей</h2>
+            <div class="wire-placeholder">Здесь появятся карточки обращений одного автора</div>
+        </section>
+        <section class="wire-card">
+            <h2 style="margin-top:0;">Настройки анализа</h2>
+            <ul>
+                <li>Порог похожести (будет настраиваться)</li>
+                <li>Окно по времени</li>
+                <li>Стоп-фразы</li>
+            </ul>
+        </section>
+    </div>
+</body>
+</html>

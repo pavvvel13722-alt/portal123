@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Портал обращений - версия 0.3</title>
+    <link rel="stylesheet" href="../../css/style.css">
+    <style>
+        body { background:#f5f5f7; }
+        .layout { max-width:1080px; margin:0 auto; padding:32px; }
+        .card { background:#ffffff; border-radius:16px; padding:24px; box-shadow:0 8px 24px rgba(0,0,0,0.08); margin-bottom:24px; }
+        .clusters { display:grid; gap:16px; }
+        .cluster { border:1px solid #d5d5d8; border-radius:12px; padding:16px; background:#fcfcfd; }
+        .cluster__header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+        .cluster__tickets { display:flex; flex-direction:column; gap:12px; }
+        .ticket { border:1px solid #ececee; border-radius:10px; padding:12px; background:#ffffff; }
+        .ticket strong { display:block; margin-bottom:6px; color:#1f54a6; }
+    </style>
+</head>
+<body>
+    <div class="layout">
+        <header class="card" style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+                <h1 style="margin:0;">Версия 0.3 - первые группы дублей</h1>
+                <p style="margin:8px 0 0 0;">Сравниваются только автор и идентичное описание (без метрик похожести).</p>
+            </div>
+            <div>
+                <label class="button button--ghost" for="csv-file">Загрузить CSV</label>
+                <input type="file" id="csv-file" accept=".csv" style="display:none;">
+            </div>
+        </header>
+        <section class="card">
+            <div class="cluster__header">
+                <h2 style="margin:0;">Статистика</h2>
+                <span id="stats-total">0 обращений</span>
+            </div>
+            <p id="stats-comment" style="margin:0;color:#555555;">Загрузите выгрузку, чтобы увидеть предварительные группы.</p>
+        </section>
+        <section class="card">
+            <div class="cluster__header">
+                <h2 style="margin:0;">Предварительные кластеры</h2>
+                <span id="cluster-count">0 групп</span>
+            </div>
+            <div id="clusters" class="clusters"></div>
+        </section>
+    </div>
+    <script>
+    (function(){
+        function parseCsv(text){
+            var rows = [];
+            var lines = text.split(/\r?\n/);
+            var header = null;
+            for (var i = 0; i < lines.length; i += 1) {
+                var line = lines[i];
+                if (!line) continue;
+                var cols = line.split(';');
+                if (!header) {
+                    header = cols;
+                    continue;
+                }
+                if (cols.length !== header.length) continue;
+                var record = {};
+                for (var j = 0; j < header.length; j += 1) {
+                    record[header[j]] = cols[j];
+                }
+                rows.push(record);
+            }
+            return rows;
+        }
+        function normalizeAuthor(value){
+            if (!value) return '';
+            return value.toLowerCase().replace(/ё/g,'е').replace(/\s+/g,' ').trim();
+        }
+        function renderClusters(records){
+            var container = document.getElementById('clusters');
+            var clusterCount = document.getElementById('cluster-count');
+            var statsComment = document.getElementById('stats-comment');
+            if (!container || !clusterCount || !statsComment) return;
+            container.innerHTML = '';
+            if (!records.length) {
+                clusterCount.textContent = '0 групп';
+                statsComment.textContent = 'Не найдено ни одного совпадения.';
+                return;
+            }
+            var buckets = {};
+            for (var i = 0; i < records.length; i += 1) {
+                var row = records[i];
+                var author = normalizeAuthor(row['Автор'] || row['Contact'] || '');
+                var desc = (row['Описание'] || '').trim();
+                if (!author || !desc) continue;
+                var key = author + '|' + desc;
+                if (!buckets[key]) buckets[key] = [];
+                buckets[key].push(row);
+            }
+            var keys = Object.keys(buckets);
+            var groups = [];
+            for (var k = 0; k < keys.length; k += 1) {
+                var list = buckets[keys[k]];
+                if (list.length > 1) groups.push(list);
+            }
+            clusterCount.textContent = groups.length + ' групп';
+            statsComment.textContent = 'Показаны совпадения по автору и идентичному описанию.';
+            for (var g = 0; g < groups.length; g += 1) {
+                var group = groups[g];
+                var groupBox = document.createElement('div');
+                groupBox.className = 'cluster';
+                var head = document.createElement('div');
+                head.className = 'cluster__header';
+                head.innerHTML = '<strong>Автор: ' + group[0]['Автор'] + '</strong><span>' + group.length + ' обращений</span>';
+                groupBox.appendChild(head);
+                var listBox = document.createElement('div');
+                listBox.className = 'cluster__tickets';
+                for (var t = 0; t < group.length; t += 1) {
+                    var row = group[t];
+                    var ticket = document.createElement('div');
+                    ticket.className = 'ticket';
+                    ticket.innerHTML = '<strong>' + (row['ID'] || 'Без номера') + '</strong><div>' + (row['Описание'] || '') + '</div>';
+                    listBox.appendChild(ticket);
+                }
+                groupBox.appendChild(listBox);
+                container.appendChild(groupBox);
+            }
+        }
+        function onFileLoaded(text){
+            var records = parseCsv(text);
+            document.getElementById('stats-total').textContent = records.length + ' обращений';
+            renderClusters(records);
+        }
+        function handleFile(input){
+            var file = input.files && input.files[0];
+            if (!file) return;
+            var reader = new FileReader();
+            reader.onload = function(event){
+                onFileLoaded(event.target.result || '');
+            };
+            reader.readAsText(file, 'utf-8');
+        }
+        var input = document.getElementById('csv-file');
+        if (input) {
+            input.addEventListener('change', function(){ handleFile(input); });
+        }
+    })();
+    </script>
+</body>
+</html>

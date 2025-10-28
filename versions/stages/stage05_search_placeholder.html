@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Портал обращений - версия 0.5</title>
+    <link rel="stylesheet" href="../../css/style.css">
+    <style>
+        body { background:#f4f5f9; }
+        .layout { max-width:1220px; margin:0 auto; padding:32px; }
+        .card { background:#ffffff; border-radius:18px; padding:24px; box-shadow:0 12px 32px rgba(15,23,42,0.08); margin-bottom:24px; }
+        .tabs { display:flex; gap:12px; margin-bottom:24px; }
+        .tabs button { padding:12px 20px; border-radius:999px; border:1px solid #c5cad6; background:#f3f5fa; cursor:pointer; }
+        .tabs button[aria-selected="true"] { background:#1f4fa5; color:#ffffff; border-color:#1f4fa5; }
+        .panel { display:none; }
+        .panel.active { display:block; }
+        .grid { display:grid; gap:16px; }
+        .cluster { border:1px solid #d7dae4; border-radius:14px; padding:18px; background:#fbfcff; }
+        .cluster__head { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+        .cluster__tickets { display:grid; gap:12px; }
+        .ticket { border:1px solid #e3e6ef; border-radius:12px; padding:12px; background:#ffffff; }
+        .ticket strong { display:block; color:#103c70; margin-bottom:8px; }
+        .settings-row { display:flex; align-items:center; gap:12px; }
+        .settings-row label { min-width:200px; }
+        .badge { background:#1f4fa5; color:#ffffff; padding:2px 10px; border-radius:999px; font-size:12px; }
+        .search-placeholder { border:2px dashed #cbd0dc; padding:40px; border-radius:16px; text-align:center; color:#64748b; }
+    </style>
+</head>
+<body>
+    <div class="layout">
+        <header class="card" style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+                <h1 style="margin:0;">Версия 0.5 - вкладки и зачаток поиска</h1>
+                <p style="margin:8px 0 0 0;">Дубли работают на упрощённых правилах, добавлен каркас для поиска по обращениям.</p>
+            </div>
+            <div>
+                <label class="button button--ghost" for="csv-file">Загрузить CSV</label>
+                <input type="file" id="csv-file" accept=".csv" style="display:none;">
+                <button id="run" type="button" class="button button--primary" disabled>Найти дубли</button>
+            </div>
+        </header>
+        <nav class="tabs" role="tablist">
+            <button type="button" data-tab="duplicates" aria-selected="true">Дубли</button>
+            <button type="button" data-tab="search" aria-selected="false">Поиск</button>
+            <button type="button" data-tab="tags" aria-selected="false">Теги</button>
+        </nav>
+        <section id="panel-duplicates" class="panel active">
+            <section class="card">
+                <div class="settings-row">
+                    <label for="threshold">Порог совпадения (%)</label>
+                    <input type="range" id="threshold" min="40" max="100" value="70">
+                    <span id="threshold-value">70%</span>
+                </div>
+            </section>
+            <section class="card">
+                <div class="cluster__head">
+                    <h2 style="margin:0;">Обзор</h2>
+                    <span class="badge" id="stats-total">0 обращений</span>
+                </div>
+                <p id="stats-comment" style="margin:0;color:#515151;">Загрузите файл и запустите анализ.</p>
+            </section>
+            <section class="card">
+                <div class="cluster__head">
+                    <h2 style="margin:0;">Найденные кластеры</h2>
+                    <span id="cluster-count">0 групп</span>
+                </div>
+                <div id="clusters" class="grid"></div>
+            </section>
+        </section>
+        <section id="panel-search" class="panel">
+            <section class="card">
+                <h2 style="margin-top:0;">Поиск по обращениям</h2>
+                <div class="search-placeholder">На этой итерации показываем только заглушку. Реальный поиск появится в следующей версии.</div>
+            </section>
+        </section>
+        <section id="panel-tags" class="panel">
+            <section class="card">
+                <h2 style="margin-top:0;">Поиск тегов</h2>
+                <div class="search-placeholder">Функция тегов ещё не реализована.</div>
+            </section>
+        </section>
+    </div>
+    <script>
+    (function(){
+        var uploadedText = '';
+        var thresholdInput = document.getElementById('threshold');
+        var thresholdLabel = document.getElementById('threshold-value');
+        var tabButtons = document.querySelectorAll('.tabs button');
+        function updateThresholdLabel(){
+            if (!thresholdInput || !thresholdLabel) return;
+            thresholdLabel.textContent = thresholdInput.value + '%';
+        }
+        function switchTab(target){
+            var panels = document.querySelectorAll('.panel');
+            for (var i = 0; i < panels.length; i += 1) {
+                panels[i].classList.remove('active');
+            }
+            var buttons = document.querySelectorAll('.tabs button');
+            for (var j = 0; j < buttons.length; j += 1) {
+                buttons[j].setAttribute('aria-selected', buttons[j].dataset.tab === target ? 'true' : 'false');
+            }
+            var panel = document.getElementById('panel-' + target);
+            if (panel) panel.classList.add('active');
+        }
+        for (var tb = 0; tb < tabButtons.length; tb += 1) {
+            tabButtons[tb].addEventListener('click', function(){ switchTab(this.dataset.tab); });
+        }
+        function parseCsv(text){
+            var rows = [];
+            var lines = text.split(/\r?\n/);
+            var header = null;
+            for (var i = 0; i < lines.length; i += 1) {
+                var line = lines[i];
+                if (!line) continue;
+                var cols = line.split(';');
+                if (!header) { header = cols; continue; }
+                if (cols.length !== header.length) continue;
+                var record = {};
+                for (var j = 0; j < header.length; j += 1) {
+                    record[header[j]] = cols[j];
+                }
+                rows.push(record);
+            }
+            return rows;
+        }
+        function tokenize(text){
+            if (!text) return [];
+            var tokens = text.toLowerCase().replace(/ё/g,'е').match(/[\p{L}\d]+/gu);
+            if (!tokens) return [];
+            var uniq = {};
+            var arr = [];
+            for (var i = 0; i < tokens.length; i += 1) {
+                var t = tokens[i];
+                if (t.length < 3) continue;
+                if (!uniq[t]) { uniq[t] = true; arr.push(t); }
+            }
+            return arr;
+        }
+        function similarity(aTokens, bTokens){
+            if (!aTokens.length || !bTokens.length) return 0;
+            var common = 0;
+            for (var i = 0; i < aTokens.length; i += 1) {
+                var token = aTokens[i];
+                for (var j = 0; j < bTokens.length; j += 1) {
+                    if (token === bTokens[j]) { common += 1; break; }
+                }
+            }
+            var base = Math.min(aTokens.length, bTokens.length);
+            return base ? Math.round(common * 100 / base) : 0;
+        }
+        function normalizeAuthor(value){
+            if (!value) return '';
+            return value.toLowerCase().replace(/ё/g,'е').replace(/\s+/g,' ').trim();
+        }
+        function renderClusters(records, threshold){
+            var container = document.getElementById('clusters');
+            var clusterCount = document.getElementById('cluster-count');
+            var statsComment = document.getElementById('stats-comment');
+            if (!container || !clusterCount || !statsComment) return;
+            container.innerHTML = '';
+            var buckets = {};
+            for (var i = 0; i < records.length; i += 1) {
+                var row = records[i];
+                var author = normalizeAuthor(row['Автор'] || row['Contact'] || '');
+                var desc = (row['Описание'] || '').trim();
+                if (!author || !desc) continue;
+                var tokens = tokenize(desc);
+                if (!buckets[author]) buckets[author] = [];
+                buckets[author].push({ row: row, tokens: tokens });
+            }
+            var groups = [];
+            var authors = Object.keys(buckets);
+            for (var a = 0; a < authors.length; a += 1) {
+                var list = buckets[authors[a]];
+                for (var i = 0; i < list.length; i += 1) {
+                    for (var j = i + 1; j < list.length; j += 1) {
+                        var score = similarity(list[i].tokens, list[j].tokens);
+                        if (score >= threshold) {
+                            groups.push({ author: authors[a], tickets: [list[i].row, list[j].row], score: score });
+                        }
+                    }
+                }
+            }
+            var merged = {};
+            var uniqueGroups = [];
+            for (var g = 0; g < groups.length; g += 1) {
+                var ids = groups[g].tickets.map(function(t){ return t['ID']; }).sort().join('|');
+                if (!merged[ids]) {
+                    merged[ids] = true;
+                    uniqueGroups.push(groups[g]);
+                }
+            }
+            clusterCount.textContent = uniqueGroups.length + ' групп';
+            statsComment.textContent = 'Используется ручной порог ' + threshold + '% по пересечению токенов.';
+            for (var g = 0; g < uniqueGroups.length; g += 1) {
+                var group = uniqueGroups[g];
+                var cluster = document.createElement('div');
+                cluster.className = 'cluster';
+                var head = document.createElement('div');
+                head.className = 'cluster__head';
+                head.innerHTML = '<strong>Автор: ' + (group.author || 'неизвестно') + '</strong><span>' + group.score + '%</span>';
+                cluster.appendChild(head);
+                var list = document.createElement('div');
+                list.className = 'cluster__tickets';
+                for (var t = 0; t < group.tickets.length; t += 1) {
+                    var ticket = document.createElement('div');
+                    ticket.className = 'ticket';
+                    var row = group.tickets[t];
+                    ticket.innerHTML = '<strong>' + (row['ID'] || 'Без номера') + '</strong><div>' + (row['Описание'] || '') + '</div>';
+                    list.appendChild(ticket);
+                }
+                cluster.appendChild(list);
+                container.appendChild(cluster);
+            }
+        }
+        function runAnalysis(){
+            if (!uploadedText) return;
+            var records = parseCsv(uploadedText);
+            var threshold = thresholdInput ? parseInt(thresholdInput.value, 10) : 70;
+            document.getElementById('stats-total').textContent = records.length + ' обращений';
+            renderClusters(records, threshold);
+        }
+        var fileInput = document.getElementById('csv-file');
+        var runButton = document.getElementById('run');
+        if (fileInput) {
+            fileInput.addEventListener('change', function(){
+                if (!fileInput.files || !fileInput.files.length) return;
+                var reader = new FileReader();
+                reader.onload = function(evt){
+                    uploadedText = evt.target && evt.target.result ? evt.target.result : '';
+                    if (runButton) runButton.disabled = uploadedText.length === 0;
+                    document.getElementById('stats-comment').textContent = 'Файл загружен, нажмите "Найти дубли".';
+                };
+                reader.readAsText(fileInput.files[0], 'utf-8');
+            });
+        }
+        if (runButton) {
+            runButton.addEventListener('click', runAnalysis);
+        }
+        if (thresholdInput) {
+            thresholdInput.addEventListener('input', function(){ updateThresholdLabel(); });
+        }
+        updateThresholdLabel();
+    })();
+    </script>
+</body>
+</html>

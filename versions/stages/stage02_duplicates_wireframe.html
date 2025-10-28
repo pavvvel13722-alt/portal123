@@ -5,33 +5,162 @@
     <title>Портал обращений - версия 0.2</title>
     <link rel="stylesheet" href="../../css/style.css">
     <style>
-        .wire-card { border:1px dashed #999999; border-radius:12px; padding:20px; margin-bottom:16px; background:#fafafa; }
-        .wire-toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
-        .wire-placeholder { background:#e8e8e8; height:140px; border-radius:12px; display:flex; align-items:center; justify-content:center; color:#666666; font-size:18px; }
+        body { background:#f4f5f9; }
+        .layout { max-width:980px; margin:0 auto; padding:32px; }
+        .card { background:#ffffff; border-radius:16px; padding:24px; box-shadow:0 10px 24px rgba(15,23,42,0.08); margin-bottom:24px; }
+        .upload-box { display:flex; justify-content:space-between; align-items:center; gap:16px; }
+        .clusters { display:grid; gap:16px; }
+        .cluster { border:1px solid #d8dbe3; border-radius:12px; padding:18px; background:#fbfcff; }
+        .cluster__header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+        .cluster__tickets { display:grid; gap:12px; }
+        .ticket { border:1px solid #e4e7f0; border-radius:10px; padding:12px; background:#ffffff; }
+        .ticket strong { display:block; margin-bottom:6px; color:#134b96; }
+        .empty { padding:40px; text-align:center; border:2px dashed #ccd2e4; border-radius:14px; color:#60708f; background:#f8faff; }
     </style>
 </head>
 <body>
-    <div class="page" style="max-width:960px;margin:0 auto;padding:32px;">
-        <header class="wire-toolbar">
-            <h1 style="margin:0;">Версия 0.2 - прототип поиска дублей</h1>
-            <button type="button" class="button button--primary" disabled>Найти дубли</button>
+    <div class="layout">
+        <header class="card upload-box">
+            <div>
+                <h1 style="margin:0;">Версия 0.2 - первые дубли</h1>
+                <p style="margin:8px 0 0 0;">На этом этапе ищем одинаковые описания у одного автора без сложных метрик.</p>
+            </div>
+            <div>
+                <label for="csv-file" class="button button--ghost">Загрузить CSV</label>
+                <input type="file" id="csv-file" accept=".csv" style="display:none;">
+            </div>
         </header>
-        <section class="wire-card">
-            <h2 style="margin-top:0;">Статистика</h2>
-            <p>Файл ещё не загружен. План: показать количество найденных дублей и время обработки.</p>
+        <section class="card">
+            <h2 style="margin-top:0;">Сводка</h2>
+            <p id="summary">Файл ещё не выбран.</p>
         </section>
-        <section class="wire-card">
-            <h2 style="margin-top:0;">Группа дублей</h2>
-            <div class="wire-placeholder">Здесь появятся карточки обращений одного автора</div>
-        </section>
-        <section class="wire-card">
-            <h2 style="margin-top:0;">Настройки анализа</h2>
-            <ul>
-                <li>Порог похожести (будет настраиваться)</li>
-                <li>Окно по времени</li>
-                <li>Стоп-фразы</li>
-            </ul>
+        <section class="card">
+            <div class="cluster__header">
+                <h2 style="margin:0;">Найденные группы</h2>
+                <span id="cluster-count">0 групп</span>
+            </div>
+            <div id="clusters" class="clusters">
+                <div class="empty" id="clusters-empty">Загрузите файл, чтобы увидеть повторы.</div>
+            </div>
         </section>
     </div>
+    <script>
+    (function(){
+        function trimValue(value){
+            if (value == null) return '';
+            return String(value).replace(/\s+/g, ' ').trim();
+        }
+        function normalizeAuthor(value){
+            var text = trimValue(value).toLowerCase();
+            text = text.replace(/ё/g, 'е');
+            return text;
+        }
+        function parseCsv(text){
+            var lines = text.split(/\r?\n/);
+            var rows = [];
+            var header = null;
+            for (var i = 0; i < lines.length; i += 1) {
+                var line = lines[i];
+                if (!line) continue;
+                var cols = line.split(';');
+                if (!header) {
+                    header = cols;
+                    continue;
+                }
+                if (cols.length !== header.length) continue;
+                var record = {};
+                for (var j = 0; j < header.length; j += 1) {
+                    record[trimValue(header[j])] = trimValue(cols[j]);
+                }
+                rows.push(record);
+            }
+            return rows;
+        }
+        function groupDuplicates(records){
+            var map = {};
+            for (var i = 0; i < records.length; i += 1) {
+                var row = records[i];
+                var author = normalizeAuthor(row['Автор'] || row['Contact'] || row['Пользователь'] || '');
+                var desc = trimValue(row['Описание'] || row['Description'] || '');
+                if (!author || !desc) continue;
+                var key = author + '|' + desc;
+                if (!map[key]) map[key] = [];
+                map[key].push(row);
+            }
+            var result = [];
+            var keys = Object.keys(map);
+            for (var k = 0; k < keys.length; k += 1) {
+                var list = map[keys[k]];
+                if (list.length > 1) result.push(list);
+            }
+            return result;
+        }
+        function esc(value){
+            var text = String(value == null ? '' : value);
+            return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+        function renderClusters(groups){
+            var container = document.getElementById('clusters');
+            var emptyBox = document.getElementById('clusters-empty');
+            var counter = document.getElementById('cluster-count');
+            if (!container || !counter) return;
+            container.innerHTML = '';
+            if (!groups.length) {
+                if (emptyBox) {
+                    emptyBox.textContent = 'Совпадений пока нет.';
+                    container.appendChild(emptyBox);
+                }
+                counter.textContent = '0 групп';
+                return;
+            }
+            if (emptyBox && emptyBox.parentNode === container) {
+                emptyBox.parentNode.removeChild(emptyBox);
+            }
+            counter.textContent = groups.length + ' групп';
+            for (var g = 0; g < groups.length; g += 1) {
+                var group = groups[g];
+                var box = document.createElement('div');
+                box.className = 'cluster';
+                var head = document.createElement('div');
+                head.className = 'cluster__header';
+                var authorName = group[0]['Автор'] || group[0]['Contact'] || group[0]['Пользователь'] || 'Автор не указан';
+                head.innerHTML = '<strong>' + esc(authorName) + '</strong><span>' + group.length + ' обращений</span>';
+                box.appendChild(head);
+                var list = document.createElement('div');
+                list.className = 'cluster__tickets';
+                for (var i = 0; i < group.length; i += 1) {
+                    var row = group[i];
+                    var ticket = document.createElement('div');
+                    ticket.className = 'ticket';
+                    var idText = row['ID'] || row['Id'] || 'Без номера';
+                    var desc = row['Описание'] || row['Description'] || '';
+                    ticket.innerHTML = '<strong>' + esc(idText) + '</strong><div>' + esc(desc) + '</div>';
+                    list.appendChild(ticket);
+                }
+                box.appendChild(list);
+                container.appendChild(box);
+            }
+        }
+        function handleFile(file){
+            if (!file) return;
+            var reader = new FileReader();
+            reader.onload = function(evt){
+                var text = evt && evt.target ? String(evt.target.result || '') : '';
+                var rows = parseCsv(text);
+                var summary = document.getElementById('summary');
+                if (summary) summary.textContent = 'Загружено обращений: ' + rows.length;
+                var groups = groupDuplicates(rows);
+                renderClusters(groups);
+            };
+            reader.readAsText(file, 'utf-8');
+        }
+        var input = document.getElementById('csv-file');
+        if (input) {
+            input.addEventListener('change', function(){
+                handleFile(input.files && input.files[0]);
+            });
+        }
+    })();
+    </script>
 </body>
 </html>

@@ -104,45 +104,68 @@
             </section>
         </main>
     </div>
+    <script src="../../js/app.core.shared.js"></script>
     <script>
     (function(){
+        function getShared(){
+            if (window && window.AppCoreShared) {
+                return window.AppCoreShared;
+            }
+            return null;
+        }
         function trimValue(value){
             if (value == null) {
                 return '';
             }
             return String(value).replace(/\s+/g, ' ').trim();
         }
-        function parseCsv(text){
-            var lines = text.split(/\r?\n/);
-            var header = null;
-            var rows = [];
-            for (var i = 0; i < lines.length; i += 1) {
-                var line = lines[i];
-                if (!line) {
-                    continue;
-                }
-                var cols = line.split(';');
-                if (!header) {
-                    header = cols;
-                    continue;
-                }
-                if (cols.length !== header.length) {
-                    continue;
-                }
-                var record = {};
-                for (var j = 0; j < header.length; j += 1) {
-                    record[trimValue(header[j])] = trimValue(cols[j]);
-                }
-                rows.push(record);
+        function parseRecords(text){
+            var shared = getShared();
+            if (!shared) {
+                return [];
             }
-            return rows;
+            var parsed = null;
+            try {
+                parsed = shared.autoParseCsv(text);
+            } catch (err) {
+                parsed = null;
+            }
+            var columns = parsed && parsed.meta && parsed.meta.fields ? parsed.meta.fields : [];
+            var data = parsed && parsed.data ? parsed.data : [];
+            if (!data.length) {
+                try {
+                    var fallback = shared.parseCsv(text, { delimiter: ';', header: true, skipEmptyLines: true });
+                    if (fallback) {
+                        data = fallback.data || [];
+                        if (!columns.length && fallback.meta && fallback.meta.fields) {
+                            columns = fallback.meta.fields;
+                        }
+                    }
+                } catch (errParse) {
+                    data = [];
+                }
+            }
+            var normalized = [];
+            for (var i = 0; i < data.length; i += 1) {
+                var normalizedRow = shared.normalizeRow(data[i], columns);
+                if (normalizedRow) {
+                    normalized.push(normalizedRow);
+                }
+            }
+            return normalized;
         }
         function matchesQuery(record, query){
-            var author = trimValue(record['Автор'] || record['Author'] || '');
-            var title = trimValue(record['Название'] || record['Title'] || '');
-            var desc = trimValue(record['Описание'] || record['Description'] || '');
+            var author = trimValue(record.author || record.requester || record.contact || '');
+            var title = trimValue(record.title || '');
+            var desc = trimValue(record.description || '');
             var lower = query.toLowerCase();
-            return author.toLowerCase().indexOf(lower) !== -1 || title.toLowerCase().indexOf(lower) !== -1 || desc.toLowerCase().indexOf(lower) !== -1;
+            if (author.toLowerCase().indexOf(lower) !== -1) {
+                return true;
+            }
+            if (title.toLowerCase().indexOf(lower) !== -1) {
+                return true;
+            }
+            return desc.toLowerCase().indexOf(lower) !== -1;
         }
         function createHighlight(text, query){
             var fragment = document.createDocumentFragment();
@@ -183,17 +206,17 @@
                 var tr = document.createElement('tr');
                 var idCell = document.createElement('td');
                 var link = document.createElement('a');
-                link.href = 'https://sfera.vtb.ru/sd/support?open=' + encodeURIComponent(row['ID'] || '');
-                link.textContent = row['ID'] || 'Без номера';
+                link.href = 'https://sfera.vtb.ru/sd/support?open=' + encodeURIComponent(row.id || '');
+                link.textContent = row.id || 'Без номера';
                 link.target = '_blank';
                 link.rel = 'noopener';
                 idCell.appendChild(link);
                 var authorCell = document.createElement('td');
-                authorCell.appendChild(createHighlight(trimValue(row['Автор'] || row['Author'] || 'Без автора'), query));
+                authorCell.appendChild(createHighlight(trimValue(row.author || row.requester || row.contact || 'Без автора'), query));
                 var titleCell = document.createElement('td');
-                titleCell.appendChild(createHighlight(trimValue(row['Название'] || row['Title'] || 'Без названия'), query));
+                titleCell.appendChild(createHighlight(trimValue(row.title || 'Без названия'), query));
                 var descCell = document.createElement('td');
-                descCell.appendChild(createHighlight(trimValue(row['Описание'] || row['Description'] || 'Без описания'), query));
+                descCell.appendChild(createHighlight(trimValue(row.description || 'Без описания'), query));
                 tr.appendChild(idCell);
                 tr.appendChild(authorCell);
                 tr.appendChild(titleCell);
@@ -228,8 +251,9 @@
             var reader = new FileReader();
             reader.onload = function(event){
                 var text = event.target && event.target.result ? event.target.result : '';
-                loadedRows = parseCsv(text);
+                loadedRows = parseRecords(text);
                 updateButtons();
+                info.textContent = file.name + ' - ' + loadedRows.length + ' записей';
                 renderResults([], '');
             };
             reader.readAsText(file, 'utf-8');

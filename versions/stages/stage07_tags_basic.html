@@ -156,38 +156,55 @@
             </section>
         </main>
     </div>
+    <script src="../../js/app.core.shared.js"></script>
     <script>
     (function(){
+        function getShared(){
+            if (window && window.AppCoreShared) {
+                return window.AppCoreShared;
+            }
+            return null;
+        }
         function trimValue(value){
             if (value == null) {
                 return '';
             }
             return String(value).replace(/\s+/g, ' ').trim();
         }
-        function parseCsv(text){
-            var lines = text.split(/\r?\n/);
-            var header = null;
-            var rows = [];
-            for (var i = 0; i < lines.length; i += 1) {
-                var line = lines[i];
-                if (!line) {
-                    continue;
-                }
-                var cols = line.split(';');
-                if (!header) {
-                    header = cols;
-                    continue;
-                }
-                if (cols.length !== header.length) {
-                    continue;
-                }
-                var record = {};
-                for (var j = 0; j < header.length; j += 1) {
-                    record[trimValue(header[j])] = trimValue(cols[j]);
-                }
-                rows.push(record);
+        function parseRecords(text){
+            var shared = getShared();
+            if (!shared) {
+                return [];
             }
-            return rows;
+            var parsed = null;
+            try {
+                parsed = shared.autoParseCsv(text);
+            } catch (err) {
+                parsed = null;
+            }
+            var columns = parsed && parsed.meta && parsed.meta.fields ? parsed.meta.fields : [];
+            var data = parsed && parsed.data ? parsed.data : [];
+            if (!data.length) {
+                try {
+                    var fallback = shared.parseCsv(text, { delimiter: ';', header: true, skipEmptyLines: true });
+                    if (fallback) {
+                        data = fallback.data || [];
+                        if (!columns.length && fallback.meta && fallback.meta.fields) {
+                            columns = fallback.meta.fields;
+                        }
+                    }
+                } catch (errParse) {
+                    data = [];
+                }
+            }
+            var normalized = [];
+            for (var i = 0; i < data.length; i += 1) {
+                var normalizedRow = shared.normalizeRow(data[i], columns);
+                if (normalizedRow) {
+                    normalized.push(normalizedRow);
+                }
+            }
+            return normalized;
         }
         function tokenize(text, minLen){
             var cleaned = text.toLowerCase().replace(/ё/g, 'е');
@@ -279,15 +296,15 @@
             var result = [];
             for (var i = 0; i < rows.length; i += 1) {
                 var row = rows[i];
-                var name = trimValue(row['Название'] || row['Title'] || '');
+                var name = trimValue(row.title || '');
                 if (name !== template) {
                     continue;
                 }
-                var status = trimValue(row['Статус'] || row['Status'] || '');
+                var status = trimValue(row.status || '');
                 if (statuses.length && statuses.indexOf(status) === -1) {
                     continue;
                 }
-                var desc = trimValue(row['Описание'] || row['Description'] || '');
+                var desc = trimValue(row.description || '');
                 if (desc) {
                     result.push(desc);
                 }
@@ -375,10 +392,11 @@
             var reader = new FileReader();
             reader.onload = function(event){
                 var text = event.target && event.target.result ? event.target.result : '';
-                allRows = parseCsv(text);
-                renderTemplates(uniqueValues(allRows, 'Название'));
-                renderStatuses(uniqueValues(allRows, 'Статус'));
+                allRows = parseRecords(text);
+                renderTemplates(uniqueValues(allRows, 'title'));
+                renderStatuses(uniqueValues(allRows, 'status'));
                 runButton.disabled = !allRows.length || !templates.options.length;
+                info.textContent = file.name + ' - ' + allRows.length + ' записей';
                 renderTags([], 0);
             };
             reader.readAsText(file, 'utf-8');

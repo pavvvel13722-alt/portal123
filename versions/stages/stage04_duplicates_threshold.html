@@ -90,8 +90,15 @@
             </section>
         </main>
     </div>
+    <script src="../../js/app.core.shared.js"></script>
     <script>
     (function(){
+        function getShared(){
+            if (window && window.AppCoreShared) {
+                return window.AppCoreShared;
+            }
+            return null;
+        }
         function trimValue(value){
             if (value == null) {
                 return '';
@@ -141,30 +148,40 @@
             var base = Math.min(aTokens.length, bTokens.length);
             return base ? Math.round(shared * 100 / base) : 0;
         }
-        function parseCsv(text){
-            var lines = text.split(/\r?\n/);
-            var header = null;
-            var rows = [];
-            for (var i = 0; i < lines.length; i += 1) {
-                var line = lines[i];
-                if (!line) {
-                    continue;
-                }
-                var cols = line.split(';');
-                if (!header) {
-                    header = cols;
-                    continue;
-                }
-                if (cols.length !== header.length) {
-                    continue;
-                }
-                var record = {};
-                for (var j = 0; j < header.length; j += 1) {
-                    record[trimValue(header[j])] = trimValue(cols[j]);
-                }
-                rows.push(record);
+        function parseRecords(text){
+            var shared = getShared();
+            if (!shared) {
+                return [];
             }
-            return rows;
+            var parsed = null;
+            try {
+                parsed = shared.autoParseCsv(text);
+            } catch (err) {
+                parsed = null;
+            }
+            var columns = parsed && parsed.meta && parsed.meta.fields ? parsed.meta.fields : [];
+            var data = parsed && parsed.data ? parsed.data : [];
+            if (!data.length) {
+                try {
+                    var fallback = shared.parseCsv(text, { delimiter: ';', header: true, skipEmptyLines: true });
+                    if (fallback) {
+                        data = fallback.data || [];
+                        if (!columns.length && fallback.meta && fallback.meta.fields) {
+                            columns = fallback.meta.fields;
+                        }
+                    }
+                } catch (errParse) {
+                    data = [];
+                }
+            }
+            var normalized = [];
+            for (var i = 0; i < data.length; i += 1) {
+                var normalizedRow = shared.normalizeRow(data[i], columns);
+                if (normalizedRow && (normalizedRow.author || normalizedRow.description)) {
+                    normalized.push(normalizedRow);
+                }
+            }
+            return normalized;
         }
         function renderCluster(container, group, scores){
             var cluster = document.createElement('article');
@@ -173,9 +190,10 @@
             header.className = 'cluster__header';
             var top = document.createElement('div');
             top.className = 'cluster__top';
+            var first = group[0];
+            var author = trimValue(first.author || first.requester || first.contact || 'Не указан автор');
             var title = document.createElement('h3');
             title.className = 'cluster__title';
-            var author = group[0]['Автор'] || group[0]['Contact'] || group[0]['Пользователь'] || group[0]['Author'] || 'Не указан автор';
             title.textContent = 'Автор: ' + author;
             var stats = document.createElement('span');
             stats.className = 'cluster__stats';
@@ -196,8 +214,8 @@
                 badge.className = 'record__badge';
                 badge.textContent = i === 0 ? 'master' : 'duplicate';
                 var link = document.createElement('a');
-                link.href = 'https://sfera.vtb.ru/sd/support?open=' + encodeURIComponent(row['ID'] || '');
-                link.textContent = row['ID'] || 'Без номера';
+                link.href = 'https://sfera.vtb.ru/sd/support?open=' + encodeURIComponent(row.id || '');
+                link.textContent = row.id || 'Без номера';
                 link.target = '_blank';
                 link.rel = 'noopener';
                 idField.appendChild(badge);
@@ -216,7 +234,7 @@
                 descTitle.textContent = 'Описание';
                 var descText = document.createElement('p');
                 descText.className = 'record__snippet';
-                descText.textContent = row['Описание'] || row['Description'] || 'Без описания';
+                descText.textContent = row.description || 'Без описания';
                 descField.appendChild(descTitle);
                 descField.appendChild(descText);
                 record.appendChild(idField);
@@ -235,12 +253,15 @@
                     continue;
                 }
                 var base = records[i];
-                var author = normalizeAuthor(base['Автор'] || base['Contact'] || base['Пользователь'] || base['Author'] || '');
-                var desc = trimValue(base['Описание'] || base['Description'] || '');
-                if (!author || !desc) {
+                var authorKey = normalizeAuthor(base.author || base.requester || base.contact || '');
+                var desc = trimValue(base.description || '');
+                if (!authorKey || !desc) {
                     continue;
                 }
                 var tokens = tokenize(desc);
+                if (!tokens.length) {
+                    continue;
+                }
                 var group = [base];
                 var scores = [100];
                 var members = [i];
@@ -249,11 +270,11 @@
                         continue;
                     }
                     var other = records[j];
-                    var otherAuthor = normalizeAuthor(other['Автор'] || other['Contact'] || other['Пользователь'] || other['Author'] || '');
-                    if (author !== otherAuthor) {
+                    var otherAuthor = normalizeAuthor(other.author || other.requester || other.contact || '');
+                    if (authorKey !== otherAuthor) {
                         continue;
                     }
-                    var otherDesc = trimValue(other['Описание'] || other['Description'] || '');
+                    var otherDesc = trimValue(other.description || '');
                     if (!otherDesc) {
                         continue;
                     }
@@ -328,8 +349,9 @@
             var reader = new FileReader();
             reader.onload = function(event){
                 var text = event.target && event.target.result ? event.target.result : '';
-                cachedRecords = parseCsv(text);
+                cachedRecords = parseRecords(text);
                 runButton.disabled = !cachedRecords.length;
+                info.textContent = file.name + ' - ' + cachedRecords.length + ' записей';
                 render([], 0);
             };
             reader.readAsText(file, 'utf-8');

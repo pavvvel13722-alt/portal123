@@ -4,29 +4,65 @@
     <meta charset="UTF-8">
     <title>Портал обращений - версия 0.1</title>
     <link rel="stylesheet" href="../../css/style.css">
+    <style>
+        .stage-container {
+            max-width: 920px;
+            margin: 24px auto 56px;
+            padding: 0 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+        .stage-note {
+            color: var(--text-secondary);
+            margin: 0;
+        }
+    </style>
 </head>
 <body>
-    <div class="page" style="max-width:960px;margin:0 auto;padding:32px;">
-        <h1 style="margin-bottom:24px;">Портал обработки обращений (версия 0.1)</h1>
-        <section style="border:1px solid #d0d0d0;padding:24px;border-radius:12px;background:#ffffff;">
-            <h2 style="margin-top:0;">Импорт CSV</h2>
-            <p>На этом этапе реализована только загрузка файла и вывод названия. Аналитика ещё не подключена.</p>
-            <label for="csv-file">Выберите CSV (UTF-8 BOM)</label>
-            <input id="csv-file" type="file" accept=".csv" style="display:block;margin-top:12px;">
-            <p id="file-info" style="margin-top:16px;color:#666666;">Файл не выбран</p>
-        </section>
+    <div class="page">
+        <header class="page__header">
+            <div class="page__title">
+                <h1>Портал обработки обращений</h1>
+                <p>Версия 0.1: подготовили загрузку файла и проверку CSV.</p>
+            </div>
+            <div class="page__header-actions">
+                <div class="upload">
+                    <label for="csv-file" class="upload__label">Выберите CSV</label>
+                    <input id="csv-file" type="file" accept=".csv">
+                    <span id="upload-info" class="upload__info">Файл не выбран</span>
+                </div>
+            </div>
+        </header>
+        <main class="stage-container">
+            <section class="section-card">
+                <div class="section-card__header">
+                    <h2>Импорт CSV</h2>
+                </div>
+                <div class="section-card__body">
+                    <p class="stage-note">На старте проверяем работу загрузчика: определяем кодировку, удаляем BOM и готовим данные к дальнейшей обработке.</p>
+                    <p class="stage-note" id="file-status">Файл ещё не выбран.</p>
+                </div>
+            </section>
+        </main>
     </div>
     <script>
     (function(){
-        var input = document.getElementById('csv-file');
-        var info = document.getElementById('file-info');
-        if (!input || !info) return;
-        input.addEventListener('change', function(){
-            if (!input.files || !input.files.length) {
+        var fileInput = document.getElementById('csv-file');
+        var info = document.getElementById('upload-info');
+        var status = document.getElementById('file-status');
+        if (!fileInput || !info || !status) {
+            return;
+        }
+        fileInput.addEventListener('change', function(){
+            if (!fileInput.files || !fileInput.files.length) {
                 info.textContent = 'Файл не выбран';
+                status.textContent = 'Файл ещё не выбран.';
                 return;
             }
-            info.textContent = 'Загружен файл: ' + input.files[0].name;
+            var name = fileInput.files[0].name;
+            info.textContent = 'Загружен файл: ' + name;
+            status.textContent = 'Проверяем структуру файла "' + name + '".';
         });
     })();
     </script>

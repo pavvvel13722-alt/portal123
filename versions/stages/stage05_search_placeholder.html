@@ -5,196 +5,129 @@
     <title>Портал обращений - версия 0.5</title>
     <link rel="stylesheet" href="../../css/style.css">
     <style>
-        body { background:#eef0f6; }
-        .layout { max-width:1240px; margin:0 auto; padding:32px; }
-        .card { background:#ffffff; border-radius:18px; padding:24px; box-shadow:0 14px 32px rgba(15,23,42,0.08); margin-bottom:24px; }
-        .tabs { display:flex; gap:12px; margin-bottom:24px; }
-        .tabs button { padding:12px 20px; border-radius:999px; border:1px solid #c5cad6; background:#f3f5fa; cursor:pointer; }
-        .tabs button[aria-selected="true"] { background:#1f4fa5; color:#ffffff; border-color:#1f4fa5; }
-        .panel { display:none; }
-        .panel.active { display:block; }
-        .grid { display:grid; gap:18px; }
-        .cluster { border:1px solid #d7dae4; border-radius:14px; padding:18px; background:#fbfcff; }
-        .cluster__head { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
-        .cluster__tickets { display:grid; gap:12px; }
-        .ticket { border:1px solid #e3e6ef; border-radius:12px; padding:12px; background:#ffffff; }
-        .ticket strong { display:block; color:#103c70; margin-bottom:8px; }
-        .settings-row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
-        .settings-row label { min-width:220px; }
-        .badge { background:#1f4fa5; color:#ffffff; padding:2px 10px; border-radius:999px; font-size:12px; }
-        table { width:100%; border-collapse:collapse; }
-        th, td { padding:10px; border-bottom:1px solid #e1e5f0; text-align:left; }
-        thead th { background:#f0f3f9; }
-        .search-bar { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; }
-        .search-bar label { display:flex; flex-direction:column; gap:6px; flex:1 1 280px; }
-        .search-bar input { padding:10px 14px; border:1px solid #cbd0dc; border-radius:10px; }
-        .empty { padding:48px; text-align:center; border:2px dashed #ccd0df; border-radius:16px; color:#64748b; background:#f7f9fe; }
+        .stage-container {
+            max-width: 1120px;
+            margin: 24px auto 72px;
+            padding: 0 24px 48px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+        .stage-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .stage-table thead {
+            background: var(--bg-subtle);
+            color: var(--text-secondary);
+        }
+        .stage-table th,
+        .stage-table td {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-color);
+            text-align: left;
+            vertical-align: top;
+        }
+        .stage-table tbody tr:hover {
+            background: var(--bg-subtle);
+        }
+        .tabs__tab[disabled] {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .search-inline {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        .search-inline input {
+            flex: 1;
+        }
     </style>
 </head>
 <body>
-    <div class="layout">
-        <header class="card" style="display:flex;justify-content:space-between;align-items:center;">
-            <div>
-                <h1 style="margin:0;">Версия 0.5 - поиск дублей и простой поиск</h1>
-                <p style="margin:8px 0 0 0;">Дубли считаются по общим словам в описании, добавлен базовый поиск по тексту.</p>
+    <div class="page">
+        <header class="page__header">
+            <div class="page__title">
+                <h1>Портал обработки обращений</h1>
+                <p>Версия 0.5: макет с вкладками и первым текстовым поиском.</p>
             </div>
-            <div>
-                <label class="button button--ghost" for="csv-file">Загрузить CSV</label>
-                <input type="file" id="csv-file" accept=".csv" style="display:none;">
+            <div class="page__header-actions">
+                <div class="upload">
+                    <label for="csv-file" class="upload__label">Загрузить CSV</label>
+                    <input id="csv-file" type="file" accept=".csv">
+                    <span id="upload-info" class="upload__info">Файл не выбран</span>
+                </div>
             </div>
         </header>
         <nav class="tabs" role="tablist">
-            <button type="button" data-tab="duplicates" aria-selected="true">Дубли</button>
-            <button type="button" data-tab="search" aria-selected="false">Поиск</button>
-            <button type="button" data-tab="tags" aria-selected="false">Теги</button>
+            <button class="tabs__tab" type="button" disabled>Дубли обращений</button>
+            <button class="tabs__tab tabs__tab--active" type="button">Поиск по обращениям</button>
+            <button class="tabs__tab" type="button" disabled>Поиск тегов</button>
         </nav>
-        <section id="panel-duplicates" class="panel active">
-            <section class="card">
-                <div class="settings-row">
-                    <label for="threshold">Минимальное совпадение слов (%)</label>
-                    <input type="range" id="threshold" min="40" max="100" value="70">
-                    <span id="threshold-value">70%</span>
-                    <button id="run" type="button" class="button button--primary" disabled>Найти дубли</button>
+        <main class="stage-container">
+            <section class="section-card">
+                <div class="section-card__header">
+                    <h2>Поиск по тексту</h2>
+                </div>
+                <div class="section-card__body">
+                    <div class="search-inline">
+                        <input id="search-query" type="text" placeholder="Например: касса не распечаталась" autocomplete="off">
+                        <button id="run-search" class="button button--primary" type="button" disabled>Найти</button>
+                    </div>
+                    <p class="section-card__hint">Ищем совпадения в полях «Название» и «Описание».</p>
                 </div>
             </section>
-            <section class="card">
-                <div class="cluster__head">
-                    <h2 style="margin:0;">Сводка</h2>
-                    <span class="badge" id="stats-total">0 обращений</span>
+            <section class="section-card section-card--results">
+                <div class="section-card__header">
+                    <h2>Результаты</h2>
                 </div>
-                <p id="stats-comment" style="margin:0;color:#515151;">Загрузите файл и запустите анализ.</p>
-            </section>
-            <section class="card">
-                <div class="cluster__head">
-                    <h2 style="margin:0;">Найденные кластеры</h2>
-                    <span id="cluster-count">0 групп</span>
-                </div>
-                <div id="clusters" class="grid">
-                    <div class="empty" id="clusters-empty">Совпадения будут показаны здесь.</div>
-                </div>
-            </section>
-        </section>
-        <section id="panel-search" class="panel">
-            <section class="card">
-                <h2 style="margin-top:0;">Простой поиск</h2>
-                <form id="search-form" class="search-bar">
-                    <label>
-                        <span>Ключевые слова</span>
-                        <input id="search-query" type="text" placeholder="vpn, ошибка, касса">
-                    </label>
-                    <button id="search-run" type="submit" class="button button--primary" disabled>Найти</button>
-                    <button id="search-reset" type="button" class="button button--ghost">Сбросить</button>
-                </form>
-            </section>
-            <section class="card">
-                <div class="cluster__head">
-                    <h3 style="margin:0;">Результаты</h3>
-                    <span id="search-counter">0 записей</span>
-                </div>
-                <div style="overflow:auto;">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Автор</th>
-                                <th>Описание</th>
-                                <th>Статус</th>
-                            </tr>
-                        </thead>
-                        <tbody id="search-results"></tbody>
-                    </table>
+                <div class="section-card__body">
+                    <div class="section-card__actions">
+                        <span id="result-count">Найдено: 0</span>
+                    </div>
+                    <div class="table-scroll">
+                        <table class="stage-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Название</th>
+                                    <th>Описание</th>
+                                    <th>Статус</th>
+                                </tr>
+                            </thead>
+                            <tbody id="results-body"></tbody>
+                        </table>
+                    </div>
                 </div>
             </section>
-        </section>
-        <section id="panel-tags" class="panel">
-            <section class="card">
-                <h2 style="margin-top:0;">Поиск тегов</h2>
-                <div class="empty">Модуль тегов появится на следующем этапе.</div>
-            </section>
-        </section>
+        </main>
     </div>
     <script>
     (function(){
-        var uploadedRows = [];
-        var tabButtons = document.querySelectorAll('.tabs button');
-        function switchTab(target){
-            var panels = document.querySelectorAll('.panel');
-            for (var i = 0; i < panels.length; i += 1) {
-                panels[i].classList.remove('active');
-            }
-            for (var j = 0; j < tabButtons.length; j += 1) {
-                var btn = tabButtons[j];
-                btn.setAttribute('aria-selected', btn.dataset.tab === target ? 'true' : 'false');
-            }
-            var panel = document.getElementById('panel-' + target);
-            if (panel) panel.classList.add('active');
-        }
-        for (var t = 0; t < tabButtons.length; t += 1) {
-            tabButtons[t].addEventListener('click', function(){ switchTab(this.dataset.tab); });
-        }
-        var thresholdInput = document.getElementById('threshold');
-        var thresholdValue = document.getElementById('threshold-value');
-        function updateThreshold(){
-            if (thresholdValue && thresholdInput) {
-                thresholdValue.textContent = String(thresholdInput.value) + '%';
-            }
-        }
-        if (thresholdInput) {
-            thresholdInput.addEventListener('input', updateThreshold);
-            updateThreshold();
-        }
         function trimValue(value){
-            if (value == null) return '';
+            if (value == null) {
+                return '';
+            }
             return String(value).replace(/\s+/g, ' ').trim();
-        }
-        function normalizeAuthor(value){
-            var text = trimValue(value).toLowerCase();
-            text = text.replace(/ё/g, 'е');
-            return text;
-        }
-        function tokenize(text){
-            var clean = trimValue(text).toLowerCase().replace(/ё/g, 'е');
-            var tokens = clean.match(/[a-z0-9а-я]+/g);
-            if (!tokens) return [];
-            var seen = {};
-            var result = [];
-            for (var i = 0; i < tokens.length; i += 1) {
-                var token = tokens[i];
-                if (token.length < 3) continue;
-                if (!seen[token]) {
-                    seen[token] = true;
-                    result.push(token);
-                }
-            }
-            return result;
-        }
-        function similarity(aTokens, bTokens){
-            if (!aTokens.length || !bTokens.length) return 0;
-            var map = {};
-            for (var i = 0; i < aTokens.length; i += 1) map[aTokens[i]] = true;
-            var intersect = 0;
-            for (var j = 0; j < bTokens.length; j += 1) {
-                if (map[bTokens[j]]) intersect += 1;
-            }
-            var unionSize = aTokens.length;
-            var seen = {};
-            for (var k = 0; k < bTokens.length; k += 1) {
-                var tk = bTokens[k];
-                if (!map[tk] && !seen[tk]) { unionSize += 1; seen[tk] = true; }
-            }
-            if (!unionSize) return 0;
-            return Math.round(intersect * 100 / unionSize);
         }
         function parseCsv(text){
             var lines = text.split(/\r?\n/);
-            var rows = [];
             var header = null;
+            var rows = [];
             for (var i = 0; i < lines.length; i += 1) {
                 var line = lines[i];
-                if (!line) continue;
+                if (!line) {
+                    continue;
+                }
                 var cols = line.split(';');
-                if (!header) { header = cols; continue; }
-                if (cols.length !== header.length) continue;
+                if (!header) {
+                    header = cols;
+                    continue;
+                }
+                if (cols.length !== header.length) {
+                    continue;
+                }
                 var record = {};
                 for (var j = 0; j < header.length; j += 1) {
                     record[trimValue(header[j])] = trimValue(cols[j]);
@@ -203,194 +136,84 @@
             }
             return rows;
         }
-        function clusterDuplicates(records, threshold){
-            var groups = [];
-            var byAuthor = {};
-            for (var i = 0; i < records.length; i += 1) {
-                var row = records[i];
-                var author = normalizeAuthor(row['Автор'] || row['Contact'] || row['Пользователь'] || '');
-                if (!author) continue;
-                if (!byAuthor[author]) byAuthor[author] = [];
-                byAuthor[author].push({ row: row, tokens: tokenize(row['Описание'] || row['Description'] || '') });
-            }
-            var authors = Object.keys(byAuthor);
-            for (var a = 0; a < authors.length; a += 1) {
-                var list = byAuthor[authors[a]];
-                if (list.length < 2) continue;
-                var size = list.length;
-                var parent = [];
-                for (var p = 0; p < size; p += 1) parent[p] = p;
-                function find(x){
-                    while (parent[x] !== x) {
-                        parent[x] = parent[parent[x]];
-                        x = parent[x];
-                    }
-                    return x;
-                }
-                function unite(aIndex, bIndex){
-                    var ra = find(aIndex);
-                    var rb = find(bIndex);
-                    if (ra !== rb) parent[rb] = ra;
-                }
-                for (var i1 = 0; i1 < size; i1 += 1) {
-                    for (var j1 = i1 + 1; j1 < size; j1 += 1) {
-                        var sim = similarity(list[i1].tokens, list[j1].tokens);
-                        if (sim >= threshold) unite(i1, j1);
-                    }
-                }
-                var mapGroups = {};
-                for (var idx = 0; idx < size; idx += 1) {
-                    var root = find(idx);
-                    if (!mapGroups[root]) mapGroups[root] = [];
-                    mapGroups[root].push(list[idx].row);
-                }
-                var keys = Object.keys(mapGroups);
-                for (var g = 0; g < keys.length; g += 1) {
-                    var cluster = mapGroups[keys[g]];
-                    if (cluster.length > 1) groups.push(cluster);
-                }
-            }
-            return groups;
+        function containsText(record, query){
+            var title = trimValue(record['Название'] || record['Title'] || '');
+            var desc = trimValue(record['Описание'] || record['Description'] || '');
+            var lower = query.toLowerCase();
+            return title.toLowerCase().indexOf(lower) !== -1 || desc.toLowerCase().indexOf(lower) !== -1;
         }
-        function esc(value){
-            var text = String(value == null ? '' : value);
-            return text.replace(/&/g, '&amp;').replace(/</g, '&lt;');
-        }
-        function renderClusters(groups){
-            var container = document.getElementById('clusters');
-            var emptyBox = document.getElementById('clusters-empty');
-            var counter = document.getElementById('cluster-count');
-            if (!container || !counter) return;
-            container.innerHTML = '';
-            if (!groups.length) {
-                if (emptyBox) {
-                    emptyBox.textContent = 'Совпадений не найдено.';
-                    container.appendChild(emptyBox);
-                }
-                counter.textContent = '0 групп';
+        function renderResults(rows){
+            var body = document.getElementById('results-body');
+            var counter = document.getElementById('result-count');
+            if (!body || !counter) {
                 return;
             }
-            counter.textContent = groups.length + ' групп';
-            for (var g = 0; g < groups.length; g += 1) {
-                var list = groups[g];
-                var box = document.createElement('div');
-                box.className = 'cluster';
-                var head = document.createElement('div');
-                head.className = 'cluster__head';
-                var authorName = list[0]['Автор'] || list[0]['Contact'] || list[0]['Пользователь'] || 'Автор не указан';
-                head.innerHTML = '<strong>' + esc(authorName) + '</strong><span>' + list.length + ' обращений</span>';
-                box.appendChild(head);
-                var wrap = document.createElement('div');
-                wrap.className = 'cluster__tickets';
-                for (var r = 0; r < list.length; r += 1) {
-                    var row = list[r];
-                    var ticket = document.createElement('div');
-                    ticket.className = 'ticket';
-                    var idText = row['ID'] || row['Id'] || 'Без номера';
-                    var desc = row['Описание'] || row['Description'] || '';
-                    ticket.innerHTML = '<strong>' + esc(idText) + '</strong><div>' + esc(desc) + '</div>';
-                    wrap.appendChild(ticket);
-                }
-                box.appendChild(wrap);
-                container.appendChild(box);
-            }
-        }
-        function runDuplicates(){
-            if (!uploadedRows.length) return;
-            var threshold = thresholdInput ? parseInt(thresholdInput.value, 10) : 70;
-            if (isNaN(threshold)) threshold = 70;
-            var groups = clusterDuplicates(uploadedRows, threshold);
-            renderClusters(groups);
-            var statsComment = document.getElementById('stats-comment');
-            if (statsComment) statsComment.textContent = 'Подобраны группы с совпадением не ниже ' + threshold + '%.';
-            var statsTotal = document.getElementById('stats-total');
-            if (statsTotal) statsTotal.textContent = uploadedRows.length + ' обращений';
-        }
-        var runButton = document.getElementById('run');
-        if (runButton) runButton.addEventListener('click', runDuplicates);
-        function renderSearch(results){
-            var tbody = document.getElementById('search-results');
-            var counter = document.getElementById('search-counter');
-            if (!tbody || !counter) return;
-            tbody.innerHTML = '';
-            counter.textContent = results.length + ' записей';
-            if (!results.length) {
-                var row = document.createElement('tr');
-                var cell = document.createElement('td');
-                cell.colSpan = 4;
-                cell.textContent = 'Ничего не найдено.';
-                row.appendChild(cell);
-                tbody.appendChild(row);
-                return;
-            }
-            for (var i = 0; i < results.length && i < 100; i += 1) {
-                var rec = results[i];
+            body.innerHTML = '';
+            counter.textContent = 'Найдено: ' + rows.length;
+            for (var i = 0; i < rows.length; i += 1) {
+                var row = rows[i];
                 var tr = document.createElement('tr');
-                var cols = [rec['ID'] || rec['Id'] || '', rec['Автор'] || rec['Contact'] || '', rec['Описание'] || rec['Description'] || '', rec['Статус'] || rec['Status'] || ''];
-                for (var c = 0; c < cols.length; c += 1) {
-                    var td = document.createElement('td');
-                    td.textContent = cols[c];
-                    tr.appendChild(td);
-                }
-                tbody.appendChild(tr);
+                var idCell = document.createElement('td');
+                var link = document.createElement('a');
+                link.href = 'https://sfera.vtb.ru/sd/support?open=' + encodeURIComponent(row['ID'] || '');
+                link.textContent = row['ID'] || 'Без номера';
+                link.target = '_blank';
+                link.rel = 'noopener';
+                idCell.appendChild(link);
+                var titleCell = document.createElement('td');
+                titleCell.textContent = row['Название'] || row['Title'] || 'Без названия';
+                var descCell = document.createElement('td');
+                descCell.textContent = row['Описание'] || row['Description'] || 'Без описания';
+                var statusCell = document.createElement('td');
+                statusCell.textContent = row['Статус'] || row['Status'] || 'Без статуса';
+                tr.appendChild(idCell);
+                tr.appendChild(titleCell);
+                tr.appendChild(descCell);
+                tr.appendChild(statusCell);
+                body.appendChild(tr);
             }
         }
-        function runSearch(query){
-            var q = trimValue(query).toLowerCase();
-            if (!q) {
-                renderSearch([]);
+        var fileInput = document.getElementById('csv-file');
+        var info = document.getElementById('upload-info');
+        var runButton = document.getElementById('run-search');
+        var queryInput = document.getElementById('search-query');
+        var loadedRows = [];
+        if (!fileInput || !info || !runButton || !queryInput) {
+            return;
+        }
+        fileInput.addEventListener('change', function(){
+            if (!fileInput.files || !fileInput.files.length) {
+                info.textContent = 'Файл не выбран';
+                loadedRows = [];
+                runButton.disabled = true;
+                renderResults([]);
                 return;
             }
-            var results = [];
-            for (var i = 0; i < uploadedRows.length; i += 1) {
-                var row = uploadedRows[i];
-                var hay = (row['Название'] || '') + ' ' + (row['Описание'] || '') + ' ' + (row['Description'] || '');
-                hay = hay.toLowerCase().replace(/ё/g, 'е');
-                if (hay.indexOf(q) !== -1) results.push(row);
-            }
-            renderSearch(results);
-        }
-        var searchForm = document.getElementById('search-form');
-        var searchInput = document.getElementById('search-query');
-        var searchButton = document.getElementById('search-run');
-        if (searchForm) {
-            searchForm.addEventListener('submit', function(evt){
-                evt.preventDefault();
-                if (!uploadedRows.length) return;
-                runSearch(searchInput ? searchInput.value : '');
-            });
-        }
-        var searchReset = document.getElementById('search-reset');
-        if (searchReset) {
-            searchReset.addEventListener('click', function(){
-                if (searchInput) searchInput.value = '';
-                renderSearch([]);
-            });
-        }
-        function enableButtons(){
-            if (runButton) runButton.removeAttribute('disabled');
-            if (searchButton) searchButton.removeAttribute('disabled');
-        }
-        function handleFile(file){
-            if (!file) return;
+            var file = fileInput.files[0];
+            info.textContent = 'Загружаем: ' + file.name;
             var reader = new FileReader();
-            reader.onload = function(evt){
-                var text = evt && evt.target ? String(evt.target.result || '') : '';
-                uploadedRows = parseCsv(text);
-                enableButtons();
-                var statsTotal = document.getElementById('stats-total');
-                if (statsTotal) statsTotal.textContent = uploadedRows.length + ' обращений';
-                var statsComment = document.getElementById('stats-comment');
-                if (statsComment) statsComment.textContent = 'Нажмите "Найти дубли", чтобы построить группы.';
-                renderClusters([]);
-                renderSearch([]);
+            reader.onload = function(event){
+                var text = event.target && event.target.result ? event.target.result : '';
+                loadedRows = parseCsv(text);
+                runButton.disabled = !loadedRows.length;
+                renderResults([]);
             };
             reader.readAsText(file, 'utf-8');
-        }
-        var input = document.getElementById('csv-file');
-        if (input) {
-            input.addEventListener('change', function(){ handleFile(input.files && input.files[0]); });
-        }
+        });
+        runButton.addEventListener('click', function(){
+            var query = trimValue(queryInput.value);
+            if (!query) {
+                renderResults([]);
+                return;
+            }
+            var matches = [];
+            for (var i = 0; i < loadedRows.length; i += 1) {
+                if (containsText(loadedRows[i], query)) {
+                    matches.push(loadedRows[i]);
+                }
+            }
+            renderResults(matches);
+        });
     })();
     </script>
 </body>

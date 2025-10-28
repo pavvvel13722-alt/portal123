@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Портал обращений - версия 0.4</title>
+    <link rel="stylesheet" href="../../css/style.css">
+    <style>
+        .stage-container {
+            max-width: 1080px;
+            margin: 24px auto 72px;
+            padding: 0 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+        .stage-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .stage-range {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .stage-range output {
+            min-width: 56px;
+            text-align: right;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <header class="page__header">
+            <div class="page__title">
+                <h1>Портал обработки обращений</h1>
+                <p>Версия 0.4: добавили токенизацию, контроль порога и ручной запуск анализа.</p>
+            </div>
+            <div class="page__header-actions">
+                <div class="upload">
+                    <label for="csv-file" class="upload__label">Загрузить CSV</label>
+                    <input id="csv-file" type="file" accept=".csv">
+                    <span id="upload-info" class="upload__info">Файл не выбран</span>
+                </div>
+                <button id="run-analysis" type="button" class="button button--primary" disabled>Найти дубли</button>
+            </div>
+        </header>
+        <main class="stage-container">
+            <section class="section-card">
+                <div class="section-card__header">
+                    <h2>Параметры анализа</h2>
+                </div>
+                <div class="section-card__body">
+                    <div class="stage-controls">
+                        <div class="stage-range">
+                            <label for="threshold" class="setting__label">Порог похожести (%)</label>
+                            <input id="threshold" type="range" min="40" max="95" value="70">
+                            <output id="threshold-value">70%</output>
+                        </div>
+                        <p class="section-card__hint">Измените значение и запустите анализ, чтобы увидеть новые результаты.</p>
+                    </div>
+                </div>
+            </section>
+            <section class="section-card">
+                <div class="section-card__header">
+                    <h2>Сводка</h2>
+                </div>
+                <div class="section-card__body">
+                    <div class="stage-controls">
+                        <div class="stage-range">
+                            <span id="summary-total">0 обращений</span>
+                            <span id="summary-groups">0 групп дублей</span>
+                            <span id="summary-reviewed">0 обработано</span>
+                        </div>
+                        <p class="section-card__hint" id="summary-note">Загрузите файл и запустите анализ, чтобы увидеть кластеры с учётом порога.</p>
+                    </div>
+                </div>
+            </section>
+            <section class="section-card section-card--results">
+                <div class="section-card__header">
+                    <h2>Результаты с порогом</h2>
+                </div>
+                <div class="section-card__body">
+                    <div id="duplicate-results" class="results">
+                        <div class="empty-state" id="empty-state">Нет данных для отображения.</div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="../../js/app.core.shared.js"></script>
+    <script>
+    (function(){
+        function getShared(){
+            if (window && window.AppCoreShared) {
+                return window.AppCoreShared;
+            }
+            return null;
+        }
+        function trimValue(value){
+            if (value == null) {
+                return '';
+            }
+            return String(value).replace(/\s+/g, ' ').trim();
+        }
+        function normalizeAuthor(value){
+            var text = trimValue(value).toLowerCase();
+            return text.replace(/ё/g, 'е');
+        }
+        function tokenize(text){
+            if (!text) {
+                return [];
+            }
+            var prepared = text.toLowerCase().replace(/ё/g, 'е');
+            var tokens = prepared.match(/[\p{L}\d]+/gu);
+            if (!tokens) {
+                return [];
+            }
+            var map = {};
+            var result = [];
+            for (var i = 0; i < tokens.length; i += 1) {
+                var token = tokens[i];
+                if (token.length < 3) {
+                    continue;
+                }
+                if (!map[token]) {
+                    map[token] = true;
+                    result.push(token);
+                }
+            }
+            return result;
+        }
+        function similarity(aTokens, bTokens){
+            if (!aTokens.length || !bTokens.length) {
+                return 0;
+            }
+            var shared = 0;
+            for (var i = 0; i < aTokens.length; i += 1) {
+                for (var j = 0; j < bTokens.length; j += 1) {
+                    if (aTokens[i] === bTokens[j]) {
+                        shared += 1;
+                        break;
+                    }
+                }
+            }
+            var base = Math.min(aTokens.length, bTokens.length);
+            return base ? Math.round(shared * 100 / base) : 0;
+        }
+        function parseRecords(text){
+            var shared = getShared();
+            if (!shared) {
+                return [];
+            }
+            var parsed = null;
+            try {
+                parsed = shared.autoParseCsv(text);
+            } catch (err) {
+                parsed = null;
+            }
+            var columns = parsed && parsed.meta && parsed.meta.fields ? parsed.meta.fields : [];
+            var data = parsed && parsed.data ? parsed.data : [];
+            if (!data.length) {
+                try {
+                    var fallback = shared.parseCsv(text, { delimiter: ';', header: true, skipEmptyLines: true });
+                    if (fallback) {
+                        data = fallback.data || [];
+                        if (!columns.length && fallback.meta && fallback.meta.fields) {
+                            columns = fallback.meta.fields;
+                        }
+                    }
+                } catch (errParse) {
+                    data = [];
+                }
+            }
+            var normalized = [];
+            for (var i = 0; i < data.length; i += 1) {
+                var normalizedRow = shared.normalizeRow(data[i], columns);
+                if (normalizedRow && (normalizedRow.author || normalizedRow.description)) {
+                    normalized.push(normalizedRow);
+                }
+            }
+            return normalized;
+        }
+        function renderCluster(container, group, scores){
+            var cluster = document.createElement('article');
+            cluster.className = 'cluster';
+            var header = document.createElement('div');
+            header.className = 'cluster__header';
+            var top = document.createElement('div');
+            top.className = 'cluster__top';
+            var first = group[0];
+            var author = trimValue(first.author || first.requester || first.contact || 'Не указан автор');
+            var title = document.createElement('h3');
+            title.className = 'cluster__title';
+            title.textContent = 'Автор: ' + author;
+            var stats = document.createElement('span');
+            stats.className = 'cluster__stats';
+            stats.textContent = group.length + ' обращений';
+            top.appendChild(title);
+            top.appendChild(stats);
+            header.appendChild(top);
+            cluster.appendChild(header);
+            var list = document.createElement('div');
+            list.className = 'record-list';
+            for (var i = 0; i < group.length; i += 1) {
+                var row = group[i];
+                var record = document.createElement('article');
+                record.className = 'record' + (i === 0 ? ' record--primary' : ' record--duplicate');
+                var idField = document.createElement('div');
+                idField.className = 'record__field record__id';
+                var badge = document.createElement('span');
+                badge.className = 'record__badge';
+                badge.textContent = i === 0 ? 'master' : 'duplicate';
+                var link = document.createElement('a');
+                link.href = 'https://sfera.vtb.ru/sd/support?open=' + encodeURIComponent(row.id || '');
+                link.textContent = row.id || 'Без номера';
+                link.target = '_blank';
+                link.rel = 'noopener';
+                idField.appendChild(badge);
+                idField.appendChild(link);
+                var scoreField = document.createElement('div');
+                scoreField.className = 'record__field';
+                var scoreTitle = document.createElement('strong');
+                scoreTitle.textContent = 'Похожесть';
+                var scoreValue = document.createElement('span');
+                scoreValue.textContent = scores[i] + '%';
+                scoreField.appendChild(scoreTitle);
+                scoreField.appendChild(scoreValue);
+                var descField = document.createElement('div');
+                descField.className = 'record__field';
+                var descTitle = document.createElement('strong');
+                descTitle.textContent = 'Описание';
+                var descText = document.createElement('p');
+                descText.className = 'record__snippet';
+                descText.textContent = row.description || 'Без описания';
+                descField.appendChild(descTitle);
+                descField.appendChild(descText);
+                record.appendChild(idField);
+                record.appendChild(scoreField);
+                record.appendChild(descField);
+                list.appendChild(record);
+            }
+            cluster.appendChild(list);
+            container.appendChild(cluster);
+        }
+        function analyze(records, threshold){
+            var result = [];
+            var processed = {};
+            for (var i = 0; i < records.length; i += 1) {
+                if (processed[i]) {
+                    continue;
+                }
+                var base = records[i];
+                var authorKey = normalizeAuthor(base.author || base.requester || base.contact || '');
+                var desc = trimValue(base.description || '');
+                if (!authorKey || !desc) {
+                    continue;
+                }
+                var tokens = tokenize(desc);
+                if (!tokens.length) {
+                    continue;
+                }
+                var group = [base];
+                var scores = [100];
+                var members = [i];
+                for (var j = 0; j < records.length; j += 1) {
+                    if (i === j || processed[j]) {
+                        continue;
+                    }
+                    var other = records[j];
+                    var otherAuthor = normalizeAuthor(other.author || other.requester || other.contact || '');
+                    if (authorKey !== otherAuthor) {
+                        continue;
+                    }
+                    var otherDesc = trimValue(other.description || '');
+                    if (!otherDesc) {
+                        continue;
+                    }
+                    var score = similarity(tokens, tokenize(otherDesc));
+                    if (score >= threshold) {
+                        group.push(other);
+                        scores.push(score);
+                        members.push(j);
+                    }
+                }
+                if (group.length > 1) {
+                    for (var m = 0; m < members.length; m += 1) {
+                        processed[members[m]] = true;
+                    }
+                    result.push({ records: group, scores: scores });
+                }
+            }
+            return result;
+        }
+        function render(result, total){
+            var container = document.getElementById('duplicate-results');
+            var empty = document.getElementById('empty-state');
+            var totalEl = document.getElementById('summary-total');
+            var groupsEl = document.getElementById('summary-groups');
+            var reviewedEl = document.getElementById('summary-reviewed');
+            var noteEl = document.getElementById('summary-note');
+            if (!container || !totalEl || !groupsEl || !reviewedEl || !noteEl) {
+                return;
+            }
+            container.innerHTML = '';
+            totalEl.textContent = total + ' обращений';
+            groupsEl.textContent = result.length + ' групп';
+            reviewedEl.textContent = total + ' обработано';
+            if (!result.length) {
+                noteEl.textContent = 'Дубли не найдены для выбранного порога.';
+                if (empty) {
+                    empty.textContent = 'Нет групп, соответствующих порогу.';
+                    container.appendChild(empty);
+                }
+                return;
+            }
+            noteEl.textContent = 'Порог применён: показываем группы, которые прошли фильтр похожести.';
+            for (var i = 0; i < result.length; i += 1) {
+                renderCluster(container, result[i].records, result[i].scores);
+            }
+        }
+        function updateThresholdLabel(){
+            var range = document.getElementById('threshold');
+            var output = document.getElementById('threshold-value');
+            if (range && output) {
+                output.textContent = range.value + '%';
+            }
+        }
+        var cachedRecords = [];
+        var fileInput = document.getElementById('csv-file');
+        var info = document.getElementById('upload-info');
+        var runButton = document.getElementById('run-analysis');
+        var thresholdInput = document.getElementById('threshold');
+        if (!fileInput || !info || !runButton || !thresholdInput) {
+            return;
+        }
+        fileInput.addEventListener('change', function(){
+            if (!fileInput.files || !fileInput.files.length) {
+                info.textContent = 'Файл не выбран';
+                cachedRecords = [];
+                runButton.disabled = true;
+                render([], 0);
+                return;
+            }
+            var file = fileInput.files[0];
+            info.textContent = 'Загружаем: ' + file.name;
+            var reader = new FileReader();
+            reader.onload = function(event){
+                var text = event.target && event.target.result ? event.target.result : '';
+                cachedRecords = parseRecords(text);
+                runButton.disabled = !cachedRecords.length;
+                info.textContent = file.name + ' - ' + cachedRecords.length + ' записей';
+                render([], 0);
+            };
+            reader.readAsText(file, 'utf-8');
+        });
+        thresholdInput.addEventListener('input', function(){
+            updateThresholdLabel();
+        });
+        runButton.addEventListener('click', function(){
+            if (!cachedRecords.length) {
+                return;
+            }
+            var threshold = parseInt(thresholdInput.value, 10);
+            if (isNaN(threshold)) {
+                threshold = 70;
+            }
+            var analysis = analyze(cachedRecords, threshold);
+            render(analysis, cachedRecords.length);
+        });
+        updateThresholdLabel();
+    })();
+    </script>
+</body>
+</html>

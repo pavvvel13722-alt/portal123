@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Портал обращений - версия 0.3</title>
+    <link rel="stylesheet" href="../../css/style.css">
+    <style>
+        .stage-container {
+            max-width: 1040px;
+            margin: 24px auto 64px;
+            padding: 0 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+        .stage-note {
+            margin: 0;
+            color: var(--text-secondary);
+        }
+        .stage-metrics {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .stage-metric {
+            padding: 10px 14px;
+            border-radius: var(--radius-md);
+            background: var(--bg-subtle);
+            border: 1px solid var(--border-color);
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <header class="page__header">
+            <div class="page__title">
+                <h1>Портал обработки обращений</h1>
+                <p>Версия 0.3: добавили сводку и подготовили место для будущих метрик похожести.</p>
+            </div>
+            <div class="page__header-actions">
+                <div class="upload">
+                    <label for="csv-file" class="upload__label">Загрузить CSV</label>
+                    <input id="csv-file" type="file" accept=".csv">
+                    <span id="upload-info" class="upload__info">Файл не выбран</span>
+                </div>
+            </div>
+        </header>
+        <main class="stage-container">
+            <section class="section-card">
+                <div class="section-card__header">
+                    <h2>Статистика загрузки</h2>
+                </div>
+                <div class="section-card__body">
+                    <div class="stage-metrics">
+                        <span class="stage-metric" id="metric-total">0 обращений</span>
+                        <span class="stage-metric" id="metric-duplicates">0 групп дублей</span>
+                        <span class="stage-metric" id="metric-largest">Максимальная группа: 0</span>
+                    </div>
+                    <p class="stage-note" id="metric-note">После загрузки покажем сводку по кластерам и сам список дублей.</p>
+                </div>
+            </section>
+            <section class="section-card section-card--results">
+                <div class="section-card__header">
+                    <h2>Кластеры дублей</h2>
+                </div>
+                <div class="section-card__body">
+                    <div id="duplicate-results" class="results">
+                        <div class="empty-state" id="empty-state">Файл ещё не загружен.</div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="../../js/app.core.shared.js"></script>
+    <script>
+    (function(){
+        function getShared(){
+            if (window && window.AppCoreShared) {
+                return window.AppCoreShared;
+            }
+            return null;
+        }
+        function trimValue(value){
+            if (value == null) {
+                return '';
+            }
+            return String(value).replace(/\s+/g, ' ').trim();
+        }
+        function normalizeAuthor(value){
+            var text = trimValue(value).toLowerCase();
+            return text.replace(/ё/g, 'е');
+        }
+        function parseRecords(text){
+            var shared = getShared();
+            if (!shared) {
+                return [];
+            }
+            var parsed = null;
+            try {
+                parsed = shared.autoParseCsv(text);
+            } catch (err) {
+                parsed = null;
+            }
+            var columns = parsed && parsed.meta && parsed.meta.fields ? parsed.meta.fields : [];
+            var data = parsed && parsed.data ? parsed.data : [];
+            if (!data.length) {
+                try {
+                    var fallback = shared.parseCsv(text, { delimiter: ';', header: true, skipEmptyLines: true });
+                    if (fallback) {
+                        data = fallback.data || [];
+                        if (!columns.length && fallback.meta && fallback.meta.fields) {
+                            columns = fallback.meta.fields;
+                        }
+                    }
+                } catch (errParse) {
+                    data = [];
+                }
+            }
+            var normalized = [];
+            for (var i = 0; i < data.length; i += 1) {
+                var normalizedRow = shared.normalizeRow(data[i], columns);
+                if (normalizedRow && (normalizedRow.author || normalizedRow.description)) {
+                    normalized.push(normalizedRow);
+                }
+            }
+            return normalized;
+        }
+        function groupRecords(rows){
+            var map = {};
+            for (var i = 0; i < rows.length; i += 1) {
+                var row = rows[i];
+                var author = normalizeAuthor(row.author || row.requester || row.contact || '');
+                var description = trimValue(row.description || '');
+                if (!author || !description) {
+                    continue;
+                }
+                var key = author + '|' + description;
+                if (!map[key]) {
+                    map[key] = [];
+                }
+                map[key].push(row);
+            }
+            var keys = Object.keys(map);
+            var result = [];
+            for (var k = 0; k < keys.length; k += 1) {
+                var group = map[keys[k]];
+                if (group.length > 1) {
+                    result.push(group);
+                }
+            }
+            return result;
+        }
+        function renderCluster(container, group){
+            var cluster = document.createElement('article');
+            cluster.className = 'cluster';
+            var header = document.createElement('div');
+            header.className = 'cluster__header';
+            var top = document.createElement('div');
+            top.className = 'cluster__top';
+            var first = group[0];
+            var author = trimValue(first.author || first.requester || first.contact || 'Не указан автор');
+            var title = document.createElement('h3');
+            title.className = 'cluster__title';
+            title.textContent = 'Автор: ' + author;
+            var stats = document.createElement('span');
+            stats.className = 'cluster__stats';
+            stats.textContent = group.length + ' обращений в группе';
+            top.appendChild(title);
+            top.appendChild(stats);
+            header.appendChild(top);
+            cluster.appendChild(header);
+            var list = document.createElement('div');
+            list.className = 'record-list';
+            for (var i = 0; i < group.length; i += 1) {
+                var row = group[i];
+                var record = document.createElement('article');
+                record.className = 'record' + (i === 0 ? ' record--primary' : ' record--duplicate');
+                var idField = document.createElement('div');
+                idField.className = 'record__field record__id';
+                var badge = document.createElement('span');
+                badge.className = 'record__badge';
+                badge.textContent = i === 0 ? 'master' : 'duplicate';
+                var link = document.createElement('a');
+                link.href = 'https://sfera.vtb.ru/sd/support?open=' + encodeURIComponent(row.id || '');
+                link.textContent = row.id || 'Без номера';
+                link.target = '_blank';
+                link.rel = 'noopener';
+                idField.appendChild(badge);
+                idField.appendChild(link);
+                var descField = document.createElement('div');
+                descField.className = 'record__field';
+                var descTitle = document.createElement('strong');
+                descTitle.textContent = 'Описание';
+                var descText = document.createElement('p');
+                descText.className = 'record__snippet';
+                descText.textContent = row.description || 'Без описания';
+                descField.appendChild(descTitle);
+                descField.appendChild(descText);
+                record.appendChild(idField);
+                record.appendChild(descField);
+                list.appendChild(record);
+            }
+            cluster.appendChild(list);
+            container.appendChild(cluster);
+        }
+        function render(groups, total){
+            var container = document.getElementById('duplicate-results');
+            var totalMetric = document.getElementById('metric-total');
+            var dupMetric = document.getElementById('metric-duplicates');
+            var maxMetric = document.getElementById('metric-largest');
+            var note = document.getElementById('metric-note');
+            var empty = document.getElementById('empty-state');
+            if (!container || !totalMetric || !dupMetric || !maxMetric || !note) {
+                return;
+            }
+            container.innerHTML = '';
+            totalMetric.textContent = total + ' обращений';
+            dupMetric.textContent = groups.length + ' групп дублей';
+            var largest = 0;
+            for (var g = 0; g < groups.length; g += 1) {
+                if (groups[g].length > largest) {
+                    largest = groups[g].length;
+                }
+            }
+            maxMetric.textContent = 'Максимальная группа: ' + largest;
+            if (!groups.length) {
+                note.textContent = 'Совпадений пока нет. На следующем шаге добавим анализ по похожести текста.';
+                if (empty) {
+                    empty.textContent = 'Дубли не найдены.';
+                    container.appendChild(empty);
+                }
+                return;
+            }
+            note.textContent = 'Данные очищены по автору и описанию, следующая версия добавит метрики похожести.';
+            for (var i = 0; i < groups.length; i += 1) {
+                renderCluster(container, groups[i]);
+            }
+        }
+        function handleFile(text){
+            var records = parseRecords(text);
+            var groups = groupRecords(records);
+            render(groups, records.length);
+        }
+        function readFile(file){
+            var reader = new FileReader();
+            reader.onload = function(event){
+                handleFile(event.target && event.target.result ? event.target.result : '');
+            };
+            reader.readAsText(file, 'utf-8');
+        }
+        var input = document.getElementById('csv-file');
+        var info = document.getElementById('upload-info');
+        if (!input || !info) {
+            return;
+        }
+        input.addEventListener('change', function(){
+            if (!input.files || !input.files.length) {
+                info.textContent = 'Файл не выбран';
+                render([], 0);
+                return;
+            }
+            var file = input.files[0];
+            info.textContent = 'Загружаем: ' + file.name;
+            readFile(file);
+        });
+    })();
+    </script>
+</body>
+</html>

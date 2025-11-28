@@ -11,6 +11,7 @@ if (typeof global.window === 'undefined') {
 const createDuplicateEngine = require('../js/app.dups.engine.js');
 const createTagEngine = require('../js/app.tags.engine.js');
 const CoreShared = require('../js/app.core.shared.js');
+const CsvLoaderStandalone = require('../js/csv.loader.standalone.js');
 
 const csvPath = path.join(__dirname, '..', 'tickets_sample_100_same_author.csv');
 const csvText = fs.readFileSync(csvPath, 'utf8');
@@ -18,6 +19,11 @@ const parsed = CoreShared.autoParseCsv(csvText);
 const records = parsed.data.map(function (row) {
     return CoreShared.normalizeRow(row, parsed.meta.fields);
 });
+
+const standaloneParsed = CsvLoaderStandalone.parseText(csvText);
+if (!standaloneParsed.rows.length || standaloneParsed.rows.length !== records.length) {
+    throw new Error('Standalone CSV loader did not match shared parser row count');
+}
 
 if (!records.length) {
     throw new Error('Sample CSV produced no records');
